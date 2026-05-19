@@ -440,6 +440,14 @@ body.submerged::after {
   letter-spacing: 0.04em;
 }
 
+#ar-fineprint {
+  margin-top: 8px;
+  font-size: 0.55rem;
+  color: rgba(224,244,255,0.25);
+  line-height: 1.4;
+  font-style: italic;
+}
+
 /* Elevation chip in GPS bar */
 #elev-bar { display: inline-flex; align-items: center; gap: 3px; }
 #elev-bar.hidden { display: none; }
