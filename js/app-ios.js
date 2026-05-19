@@ -223,10 +223,13 @@ async function onPosition(pos) {
 
   if (modelDepth === null) {
     elDepthVal.textContent   = '--';
-    elDepthBadge.textContent = 'NO FLOOD IN THIS AREA';
+    elDepthBadge.textContent = 'OUTSIDE COVERAGE AREA';
     elDepthBadge.className   = 'badge-none';
     renderer.setFlood(0, 'none');
     document.body.classList.remove('submerged');
+    elFloodFilter.classList.remove('active');
+    elFloodFilter.style.height = '0%';
+    elWaterLevel.classList.add('hidden');
     return;
   }
 
