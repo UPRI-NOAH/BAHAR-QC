@@ -149,6 +149,15 @@ html, body {
   line-height: 1.5;
 }
 
+.fineprint {
+  font-size: 0.65rem;
+  color: rgba(224,244,255,0.25);
+  text-align: center;
+  line-height: 1.5;
+  max-width: 380px;
+  font-style: italic;
+}
+
 /* ── Camera feed (iOS AR background) ─────────────────────────────────── */
 #camera-feed {
   display: none;
