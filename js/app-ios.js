@@ -262,16 +262,9 @@ async function onPosition(pos) {
         `[BAHAR] terrain=${terrainElev.toFixed(1)}m  model=${modelDepth.toFixed(2)}m` +
         `  userAlt=${altitude.toFixed(1)}m  acc=±${altitudeAccuracy ?? '?'}m  effective=${depth.toFixed(2)}m`
       );
-    } else {
-      // Both terrain APIs failed. Conservative fallback: flood zones in QC sit on
-      // terrain ≤ 35 m. If the user's GPS altitude exceeds that plus model depth,
-      // they are definitely above the water surface regardless of actual terrain.
-      if (altitude > 35 + modelDepth) {
-        depth = 0;
-        aboveWater = true;
-        console.log(`[BAHAR] terrain API unavailable — altitude ${altitude.toFixed(1)} m clearly above flood`);
-      }
     }
+    // If terrain API unavailable, fall back to raw model depth — better to show
+    // flood on a high floor than suppress flood for a ground-floor user on high terrain.
   }
 
   currentDepth  = depth;
