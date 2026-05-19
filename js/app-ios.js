@@ -38,35 +38,40 @@ let currentDepth = 0;
 let currentHazard = 'none';
 
 /* ── Terrain elevation cache ───────────────────────────────────────────────── */
-/* Fetches ground elevation (metres above sea level) from OpenTopoData SRTM.
-   Result is cached and only re-fetched when the user moves more than ~100 m,
-   so it costs at most one API call per session in a typical walkabout. */
-let _terrainElev    = null;   // cached elevation in metres
-let _terrainLatLon  = null;   // {lat, lon} where cache was taken
+let _terrainElev    = null;
+let _terrainLatLon  = null;
 
 async function getTerrainElevation(lat, lon) {
   if (_terrainLatLon) {
     const dlat = lat - _terrainLatLon.lat;
     const dlon = lon - _terrainLatLon.lon;
-    // ~0.001 deg ≈ 100 m — skip re-fetch if still nearby
-    if (Math.sqrt(dlat * dlat + dlon * dlon) < 0.001) return _terrainElev;
+    if (Math.sqrt(dlat * dlat + dlon * dlon) < 0.005) return _terrainElev; // ~500 m cache
   }
-  try {
-    const res  = await fetch(
-      `https://api.opentopodata.org/v1/srtm30m?locations=${lat.toFixed(5)},${lon.toFixed(5)}`
-    );
-    if (!res.ok) return _terrainElev; // keep stale cache on error
-    const data = await res.json();
-    const elev = data?.results?.[0]?.elevation;
-    if (elev !== null && elev !== undefined) {
-      _terrainElev   = elev;
-      _terrainLatLon = { lat, lon };
-      console.log(`[BAHAR] Terrain elevation: ${elev.toFixed(1)} m`);
-    }
-  } catch {
-    // network failure — keep using stale cache or null
+
+  const coords = `${lat.toFixed(5)},${lon.toFixed(5)}`;
+  const apis = [
+    `https://api.opentopodata.org/v1/srtm30m?locations=${coords}`,
+    `https://api.open-elevation.com/api/v1/lookup?locations=${coords}`,
+  ];
+
+  for (const url of apis) {
+    try {
+      const ctrl = new AbortController();
+      const timer = setTimeout(() => ctrl.abort(), 5000);
+      const res  = await fetch(url, { signal: ctrl.signal });
+      clearTimeout(timer);
+      if (!res.ok) continue;
+      const data = await res.json();
+      const elev = data?.results?.[0]?.elevation;
+      if (elev != null) {
+        _terrainElev   = elev;
+        _terrainLatLon = { lat, lon };
+        console.log(`[BAHAR] Terrain: ${elev.toFixed(1)} m (${url.includes('opentopodata') ? 'OpenTopo' : 'OpenElev'})`);
+        return _terrainElev;
+      }
+    } catch { /* try next */ }
   }
-  return _terrainElev;
+  return _terrainElev; // stale cache or null
 }
 
 /* ── Platform detection ────────────────────────────────────────────────────── */
@@ -247,9 +252,9 @@ async function onPosition(pos) {
   let aboveWater = false;
 
   const altAvailable = altitude !== null && altitude !== undefined;
-  if (altAvailable) {
+  if (altAvailable && modelDepth > 0) {
     const terrainElev = await getTerrainElevation(lat, lon);
-    if (terrainElev !== null && modelDepth > 0) {
+    if (terrainElev !== null) {
       const waterSurface = terrainElev + modelDepth;
       depth = Math.max(0, waterSurface - altitude);
       if (depth === 0) aboveWater = true;
@@ -257,6 +262,15 @@ async function onPosition(pos) {
         `[BAHAR] terrain=${terrainElev.toFixed(1)}m  model=${modelDepth.toFixed(2)}m` +
         `  userAlt=${altitude.toFixed(1)}m  acc=±${altitudeAccuracy ?? '?'}m  effective=${depth.toFixed(2)}m`
       );
+    } else {
+      // Both terrain APIs failed. Conservative fallback: flood zones in QC sit on
+      // terrain ≤ 35 m. If the user's GPS altitude exceeds that plus model depth,
+      // they are definitely above the water surface regardless of actual terrain.
+      if (altitude > 35 + modelDepth) {
+        depth = 0;
+        aboveWater = true;
+        console.log(`[BAHAR] terrain API unavailable — altitude ${altitude.toFixed(1)} m clearly above flood`);
+      }
     }
   }
 
