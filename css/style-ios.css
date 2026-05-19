@@ -393,50 +393,19 @@ body.submerged::after {
   z-index: 201;
 }
 
-/* Elevation row — sits inside the depth card below water-level-label */
-#elevation-row {
-  display: flex;
-  align-items: baseline;
-  justify-content: center;
-  gap: 4px;
-  margin-top: 10px;
-  padding-top: 8px;
-  border-top: 1px solid rgba(0,180,216,0.15);
-  transition: opacity 0.4s;
-}
-
-#elevation-row.hidden { opacity: 0; pointer-events: none; }
-
-#elevation-icon {
-  font-size: 0.75rem;
-  color: var(--blue-lt);
-}
-
-#elevation-value {
-  font-size: 1.25rem;
-  font-weight: 800;
-  color: #caf0f8;
-  line-height: 1;
-}
-
-#elevation-unit {
-  font-size: 0.72rem;
-  color: rgba(224,244,255,0.5);
-  letter-spacing: 0.06em;
-}
-
-#elevation-accuracy {
-  font-size: 0.65rem;
-  color: rgba(224,244,255,0.35);
-  letter-spacing: 0.04em;
-}
 
 #ar-fineprint {
-  margin-top: 8px;
+  position: absolute;
+  bottom: 78px;
+  left: 50%;
+  transform: translateX(-50%);
   font-size: 0.55rem;
-  color: rgba(224,244,255,0.25);
+  color: rgba(224,244,255,0.22);
   line-height: 1.4;
   font-style: italic;
+  text-align: center;
+  width: 280px;
+  pointer-events: none;
 }
 
 /* Elevation chip in GPS bar */

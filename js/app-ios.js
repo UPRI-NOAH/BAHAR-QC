@@ -22,9 +22,6 @@ const elDepthBadge  = document.getElementById('depth-badge');
 const elGpsText     = document.getElementById('gps-text');
 const elElevBar     = document.getElementById('elev-bar');
 const elElevBarVal  = document.getElementById('elev-bar-value');
-const elElevRow     = document.getElementById('elevation-row');
-const elElevVal     = document.getElementById('elevation-value');
-const elElevAcc     = document.getElementById('elevation-accuracy');
 const elScanHint    = document.getElementById('scan-hint');
 const elLanding     = document.getElementById('screen-landing');
 const elOverlay     = document.getElementById('ar-overlay');
@@ -173,20 +170,11 @@ async function onPosition(pos) {
     `${lat.toFixed(5)}°N  ${lon.toFixed(5)}°E  (±${Math.round(accuracy)}m)`;
 
   if (altitude !== null && altitude !== undefined) {
-    const altM = altitude.toFixed(1);
-    elElevBarVal.textContent = altM;
+    elElevBarVal.textContent = altitude.toFixed(1);
     elElevBar.classList.remove('hidden');
-
-    elElevVal.textContent = altM;
-    elElevAcc.textContent = altitudeAccuracy !== null
-      ? `±${Math.round(altitudeAccuracy)}m`
-      : '';
-    elElevRow.classList.remove('hidden');
-
     renderer.setElevation(altitude, altitudeAccuracy);
   } else {
     elElevBar.classList.add('hidden');
-    elElevRow.classList.add('hidden');
   }
 
   const modelDepth = flood.getDepth(lat, lon);
