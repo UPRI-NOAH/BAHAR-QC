@@ -292,7 +292,9 @@ export class ARRenderer {
     }
 
     if (this.floodDepth > 0) {
-      const waterY     = groundY + this.floodDepth;
+      // Clamp water plane so it never rises above camera — once depth ≥ 1.7 m
+      // the body.submerged CSS overlay handles the underwater visual.
+      const waterY     = Math.min(groundY + this.floodDepth, -0.05);
       const planeScale = Math.max(0.5, Math.min(this.floodDepth * 2.0 + 0.5, 3.0));
       this._waterPlane.scale.setScalar(planeScale);
       this._waterPlane.position.set(fx, waterY, fz);
@@ -377,7 +379,7 @@ export class ARRenderer {
     const fz = camPos.z + camDir.z * 2.5;
 
     if (this.floodDepth > 0) {
-      const waterY     = groundY + this.floodDepth;
+      const waterY     = Math.min(groundY + this.floodDepth, camPos.y - 0.05);
       const planeScale = Math.max(0.5, Math.min(this.floodDepth * 2.0 + 0.5, 3.0));
       this._waterPlane.scale.setScalar(planeScale);
       this._waterPlane.position.set(fx, waterY, fz);

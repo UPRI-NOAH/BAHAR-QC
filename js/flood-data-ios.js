@@ -78,6 +78,11 @@ export class FloodData {
     };
 
     const q00 = cell(row0,     col0);
+
+    // If the cell itself has no flood polygon, return 0 — don't bleed
+    // values from neighbouring flooded cells into dry areas.
+    if (q00 === 0) return 0;
+
     const q10 = cell(row0,     col0 + 1);
     const q01 = cell(row0 + 1, col0);
     const q11 = cell(row0 + 1, col0 + 1);
