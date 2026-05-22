@@ -205,7 +205,7 @@ async function onPosition(pos) {
   renderer.setFlood(depth, currentHazard);
 
   if (depth > 0) {
-    const pct = Math.min((depth / 1.6) * 72, 88);
+    const pct = Math.min((depth / 1.7) * 72, 88);
     elFloodFilter.classList.add('active');
     elFloodFilter.style.height = pct.toFixed(1) + '%';
   } else {
@@ -229,14 +229,12 @@ function setStatus(msg, cls = '') {
   elStatus.className   = `status ${cls}`;
 }
 
+// Depth thresholds based on average Filipino height 5'6" (1.68 m)
 function waterLevelLabel(depth) {
-  if (depth <= 0)    return '';
-  if (depth < 0.10)  return '💧 Wet ground';
-  if (depth < 0.25)  return '🦶 Ankle deep';
-  if (depth < 0.50)  return '🦵 Knee deep';
-  if (depth < 0.80)  return '🩱 Waist deep';
-  if (depth < 1.20)  return '👕 Chest deep';
-  if (depth < 1.60)  return '😬 Neck deep';
+  if (depth <= 0)   return '';
+  if (depth < 0.5)  return '🦶 Ankle deep';
+  if (depth < 1.5)  return '🦵 Knee deep';
+  if (depth < 1.7)  return '💪 Shoulder deep';
   return '🌊 Above head — danger!';
 }
 
