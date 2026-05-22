@@ -1,98 +1,68 @@
 /**
- * FloodData — GeoBits-inspired binary grid loader
+ * FloodData — Mapbox Tilequery-backed flood depth lookup
  *
- * Data format (GeoBits / DSHA approach):
- *   Header : tiny JSON with grid metadata
- *   Binary : Uint8Array, 1 byte per cell
- *            0       = no flood
- *            1–254   = depth in steps of `header.step` metres
+ * Queries the upri-noah.mm_fh_100yr_tls vector tileset at the user's GPS
+ * position via the Mapbox Tilequery REST API.  Results are cached per ~55 m
+ * grid cell so the API is not hit on every GPS ping.
  *
- * Point query is O(1):
- *   col = floor((lon - west)  / cellDeg)
- *   row = floor((north - lat) / cellDeg)
- *   depth = grid[row * cols + col] * step
- *
- * File size: ~269 KB binary vs 1,110 KB JSON (4× smaller, ~80 KB gzipped)
+ * getDepth(lat, lon) → Promise<number|null>
+ *   null  = outside Metro Manila coverage
+ *   0     = inside coverage, no flood polygon at this point
+ *   >0    = flood depth in metres (the `Var` property from the tileset)
  */
+
+const TILEQUERY_ENDPOINT = '/api/tilequery';
+
+// Metro Manila bounding box — return null (outside coverage) beyond this
+const MM_BOUNDS = { north: 14.82, south: 14.35, west: 120.90, east: 121.20 };
+
 export class FloodData {
   constructor() {
-    this.ready  = false;
-    this._hdr   = null;   // header JSON
-    this._grid  = null;   // Uint8Array
+    this.ready  = true;
+    this._cache = new Map();   // cacheKey → depth (metres)
   }
 
-  async load(headerUrl = './qc_flood_header.json') {
-    // 1. Fetch tiny header
-    const hRes = await fetch(headerUrl);
-    if (!hRes.ok) throw new Error(`Cannot load flood header: ${hRes.status}`);
-    this._hdr = await hRes.json();
-
-    // 2. Fetch binary grid (same folder as header)
-    const base    = headerUrl.substring(0, headerUrl.lastIndexOf('/') + 1);
-    const binUrl  = base + this._hdr.dataFile;
-    const bRes    = await fetch(binUrl);
-    if (!bRes.ok) throw new Error(`Cannot load flood binary: ${bRes.status}`);
-    const buf     = await bRes.arrayBuffer();
-    // Uint16, little-endian — matches Python array('H') output
-    this._grid    = new Uint16Array(buf);
-
+  async load() {
+    // Data is fetched on demand — nothing to preload
     this.ready = true;
-    console.log(
-      `[FloodData] ${this._hdr.cols}×${this._hdr.rows} grid | ` +
-      `step=${this._hdr.step}m | ${(buf.byteLength/1024).toFixed(0)} KB binary`
-    );
+    console.log('[FloodData] Mapbox Tilequery mode — data fetched on demand');
   }
 
-  /**
-   * Returns flood depth in metres at the given WGS-84 coordinate.
-   * null  = outside data extent
-   * 0     = inside extent, no flood modelled
-   * >0    = flood depth in metres
-   *
-   * Uses bilinear interpolation across the four surrounding grid cells so
-   * depth transitions smoothly as you move, rather than jumping by the full
-   * cell width (~11 m) at each grid boundary.
-   */
-  getDepth(lat, lon) {
-    if (!this.ready) return null;
-    const { bounds, cols, rows, cellDeg, step } = this._hdr;
+  // Round to ~55 m grid (0.0005 ° ≈ 55 m) to reuse cached results
+  _cacheKey(lat, lon) {
+    return `${(lat * 2000).toFixed(0)},${(lon * 2000).toFixed(0)}`;
+  }
 
-    if (lon < bounds.west  || lon > bounds.east ||
-        lat < bounds.south || lat > bounds.north) return null;
+  async getDepth(lat, lon) {
+    if (lat < MM_BOUNDS.south || lat > MM_BOUNDS.north ||
+        lon < MM_BOUNDS.west  || lon > MM_BOUNDS.east) return null;
 
-    // Fractional cell position
-    const fc = (lon - bounds.west)  / cellDeg;
-    const fr = (bounds.north - lat) / cellDeg;
+    const key = this._cacheKey(lat, lon);
+    if (this._cache.has(key)) return this._cache.get(key);
 
-    const col0 = Math.min(Math.floor(fc), cols - 1);
-    const row0 = Math.min(Math.floor(fr), rows - 1);
+    const url = `${TILEQUERY_ENDPOINT}?lat=${lat}&lon=${lon}`;
 
-    // Fractional offset within the cell (0–1)
-    const fx = fc - col0;
-    const fy = fr - row0;
+    try {
+      const res = await fetch(url);
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const data = await res.json();
 
-    // Safe neighbour read — clamps at grid edges
-    const cell = (r, c) => {
-      if (r < 0 || r >= rows || c < 0 || c >= cols) return 0;
-      return this._grid[r * cols + c];
-    };
+      let depth = 0;
+      if (data.features?.length > 0) {
+        // Take the maximum depth across all overlapping polygons
+        for (const f of data.features) {
+          const v = parseFloat(f.properties?.Var ?? 0) || 0;
+          if (v > depth) depth = v;
+        }
+      }
 
-    const q00 = cell(row0,     col0);
-
-    // If the cell itself has no flood polygon, return 0 — don't bleed
-    // values from neighbouring flooded cells into dry areas.
-    if (q00 === 0) return 0;
-
-    const q10 = cell(row0,     col0 + 1);
-    const q01 = cell(row0 + 1, col0);
-    const q11 = cell(row0 + 1, col0 + 1);
-
-    // Bilinear blend
-    const q = (1 - fy) * ((1 - fx) * q00 + fx * q10)
-            +      fy  * ((1 - fx) * q01 + fx * q11);
-
-    if (q <= 0) return 0;
-    return +(q * step).toFixed(2);
+      this._cache.set(key, depth);
+      return depth;
+    } catch (e) {
+      console.warn('[FloodData] Tilequery failed:', e.message);
+      // On error stay inside coverage — return last cached value or 0
+      return this._cache.get(key) ?? 0;
+    }
   }
 
   hazardLevel(depth) {
@@ -103,7 +73,11 @@ export class FloodData {
   }
 
   hazardLabel(depth) {
-    return { none: 'NO FLOOD IN THIS AREA', low: 'LOW HAZARD', med: 'MED HAZARD', high: 'HIGH HAZARD' }
-      [this.hazardLevel(depth)];
+    return {
+      none: 'NO FLOOD IN THIS AREA',
+      low:  'LOW HAZARD',
+      med:  'MED HAZARD',
+      high: 'HIGH HAZARD',
+    }[this.hazardLevel(depth)];
   }
 }

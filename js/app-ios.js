@@ -43,12 +43,12 @@ function isIOS() {
 
 /* ── Boot sequence ─────────────────────────────────────────────────────────── */
 async function boot() {
-  setStatus('Loading flood data…');
+  setStatus('Initialising…');
 
   try {
-    await flood.load('./qc_flood_header.json');
+    await flood.load();
   } catch (e) {
-    setStatus('Could not load flood data. Check console.', 'err');
+    setStatus('Could not initialise flood data. Check console.', 'err');
     console.error(e);
     return;
   }
@@ -177,7 +177,7 @@ async function onPosition(pos) {
     elElevBar.classList.add('hidden');
   }
 
-  const modelDepth = flood.getDepth(lat, lon);
+  const modelDepth = await flood.getDepth(lat, lon);
 
   if (modelDepth === null) {
     elDepthVal.textContent   = '--';

@@ -40,6 +40,7 @@ const WATER_FRAG = /* glsl */`
 
   uniform float uOpacity;
   uniform float uDepth;
+  uniform float uTime;
   uniform vec3  uCamPos;
 
   varying vec3  vWorldPos;
@@ -48,16 +49,25 @@ const WATER_FRAG = /* glsl */`
 
   void main() {
     float distFactor = smoothstep(0.3, 3.5, vDist);
-    float depthScale = clamp(uDepth * 1.5 + 0.60, 0.60, 1.0);
 
-    vec2  edgeDist  = min(vUV, 1.0 - vUV);
-    float edgeFade  = smoothstep(0.0, 0.08, edgeDist.x)
-                    * smoothstep(0.0, 0.08, edgeDist.y);
+    vec2  edgeDist = min(vUV, 1.0 - vUV);
+    float edgeFade = smoothstep(0.0, 0.08, edgeDist.x)
+                   * smoothstep(0.0, 0.08, edgeDist.y);
 
-    vec3 col = vec3(0.25, 0.65, 1.00);
+    // Animated surface ripple — two overlapping sine waves
+    float ripple = sin(vUV.x * 18.0 + uTime * 1.8) * cos(vUV.y * 14.0 + uTime * 1.2);
+    ripple = ripple * 0.5 + 0.5;  // remap to 0..1
 
-    float alpha = mix(0.22, 0.62, distFactor) * depthScale * edgeFade * uOpacity;
-    alpha = clamp(alpha, 0.0, 0.70);
+    // Translucent teal water — can see the ground through it
+    vec3 col = vec3(0.18, 0.68, 0.88) + vec3(0.06, 0.08, 0.04) * ripple;
+
+    // Low base alpha so camera feed (real ground) shows through clearly.
+    // Depth adds a tiny amount of extra opacity for deeper water.
+    float baseAlpha  = mix(0.08, 0.22, distFactor);
+    float depthExtra = clamp(uDepth * 0.04, 0.0, 0.08);
+    float shimmer    = ripple * 0.04;
+    float alpha      = (baseAlpha + depthExtra + shimmer) * edgeFade * uOpacity;
+    alpha = clamp(alpha, 0.0, 0.30);
 
     gl_FragColor = vec4(col, alpha);
   }
@@ -273,7 +283,10 @@ export class ARRenderer {
 
     // Camera is fixed at world origin (0,0,0); ground is 1.6 m below
     const camPos = new THREE.Vector3(0, 0, 0);
-    if (this._waterMat) this._waterMat.uniforms.uCamPos.value.copy(camPos);
+    if (this._waterMat) {
+      this._waterMat.uniforms.uCamPos.value.copy(camPos);
+      this._waterMat.uniforms.uTime.value = this._clock.getElapsedTime();
+    }
 
     // Horizontal forward direction from camera orientation
     const camDir = new THREE.Vector3(0, 0, -1);
@@ -314,7 +327,10 @@ export class ARRenderer {
     const camPos = new THREE.Vector3();
     xrCam.getWorldPosition(camPos);
 
-    if (this._waterMat) this._waterMat.uniforms.uCamPos.value.copy(camPos);
+    if (this._waterMat) {
+      this._waterMat.uniforms.uCamPos.value.copy(camPos);
+      this._waterMat.uniforms.uTime.value = this._clock.getElapsedTime();
+    }
 
     const camDir = new THREE.Vector3();
     xrCam.getWorldDirection(camDir);
@@ -401,6 +417,7 @@ export class ARRenderer {
       uniforms: {
         uOpacity: { value: 0 },
         uDepth:   { value: 0 },
+        uTime:    { value: 0 },
         uCamPos:  { value: new THREE.Vector3() },
       },
       vertexShader:   WATER_VERT,

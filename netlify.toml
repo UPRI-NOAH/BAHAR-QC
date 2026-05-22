@@ -3,7 +3,12 @@
 
 [[redirects]]
   from   = "/"
-  to     = "/index-ios.html"
+  to     = "/index.html"
+  status = 200
+
+[[redirects]]
+  from   = "/api/tilequery"
+  to     = "/.netlify/functions/tilequery"
   status = 200
 
 # Required for WebXR: COOP must be same-origin.
