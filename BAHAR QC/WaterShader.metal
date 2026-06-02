@@ -205,8 +205,8 @@ void waterSurface(realitykit::surface_parameters params)
     params.surface().set_normal(rippleNormal);
     params.surface().set_roughness(half(0.03));
     params.surface().set_metallic(half(0.0));
-    // More transparent — refraction handles the underwater view, and the
-    // alpha-blend with the camera background lets the scene show through
-    // beneath the reflective film. Reads as cleaner, clearer water.
-    params.surface().set_opacity(half(0.62) * half(edgeAlpha));
+    // Even more transparent — the underwater scene + the refraction warp +
+    // the slight blue tint together still read as water, but more of the
+    // unwarped background bleeds through for an airier, cleaner feel.
+    params.surface().set_opacity(half(0.48) * half(edgeAlpha));
 }
