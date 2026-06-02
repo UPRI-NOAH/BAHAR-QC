@@ -180,12 +180,12 @@ void waterSurface(realitykit::surface_parameters params)
     float3 halfV  = normalize(sunDir + viewDir);
     float sunSpec = pow(saturate(dot(rippleNormal, halfV)), 80.0);
 
-    // Near-neutral water tint — barely any blue cast. The reference reads as
-    // "clear water" rather than "pool water"; the colour comes from the
-    // reflection/refraction of the scene, not from a colour overlay.
-    half3 waterTint = half3(0.55, 0.62, 0.66);
-    half3 brightened = clamp(refraction + waterTint * half(0.10), half3(0.0), half3(1.0));
-    half3 tintedRefraction = mix(refraction, brightened, half(0.30));
+    // Light cool tint — slight blue cast so the water reads as water rather
+    // than colourless glass, but kept restrained so the underwater scene
+    // still comes through clearly.
+    half3 waterTint = half3(0.45, 0.62, 0.85);
+    half3 brightened = clamp(refraction + waterTint * half(0.18), half3(0.0), half3(1.0));
+    half3 tintedRefraction = mix(refraction, brightened, half(0.40));
 
     // Fresnel-driven reflection: looking down at the water shows the warped
     // refraction (= heavy distortion of submerged content), looking flat at
