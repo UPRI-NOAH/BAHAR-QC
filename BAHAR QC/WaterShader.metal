@@ -139,12 +139,12 @@ void waterSurface(realitykit::surface_parameters params)
 
     constexpr sampler camSampler(filter::linear, address::clamp_to_edge);
 
-    // ===== Refraction with subtle chromatic aberration =====
-    // RGB channels sample at slightly different offsets along the ripple
-    // gradient — gives the warped underwater view a prismatic edge that
-    // sells "real water" without being distracting.
-    float2 refractBase = screenUv + float2(dHdx, dHdz) * 0.028;
-    float2 ca = float2(dHdx, dHdz) * 0.006;
+    // ===== Refraction: strongly-warped view of what's BELOW =====
+    // The big UV-warp coefficient is the main "distortion" dial — large values
+    // give the heavy wobble you see when looking through real shallow water.
+    // Chromatic aberration retained but small; the dominant effect is the warp.
+    float2 refractBase = screenUv + float2(dHdx, dHdz) * 0.090;
+    float2 ca = float2(dHdx, dHdz) * 0.010;
     float2 uvR = clamp(refractBase + ca, 0.001, 0.999);
     float2 uvG = clamp(refractBase,      0.001, 0.999);
     float2 uvB = clamp(refractBase - ca, 0.001, 0.999);
@@ -155,59 +155,54 @@ void waterSurface(realitykit::surface_parameters params)
     );
 
     // ===== Reflection: mirrored view of what's ABOVE =====
+    // Same heavy warp so reflected scenery (ceiling, lights) ripples convincingly.
     float2 reflectUv = float2(screenUv.x, 1.0 - screenUv.y);
-    reflectUv += float2(dHdx * 0.04, dHdz * 0.07);
+    reflectUv += float2(dHdx * 0.11, dHdz * 0.13);
     reflectUv = clamp(reflectUv, 0.001, 0.999);
     half3 reflection = half3(params.textures().custom().sample(camSampler, reflectUv).rgb);
 
-    // Ripple bands from the height field.
+    // Ripple height bands for subtle tonal variation.
     float rippleHeight = h - 0.5;
     half crest  = half(saturate(rippleHeight * 1.6));
     half trough = half(saturate(-rippleHeight * 1.4));
 
-    // Fresnel via view_direction (fragment → viewer). Sharper curve = stronger
-    // reflection at glancing angles, near-clear when looking straight down.
+    // Fresnel via view_direction (fragment → viewer). Softer exponent so
+    // reflection contributes at most angles, not only at glancing — the
+    // reference image has bright reflections all over the water surface.
     float3 viewDir = params.geometry().view_direction();
     float NdotV = saturate(dot(rippleNormal, viewDir));
-    float fresnel = pow(1.0 - NdotV, 4.0);
+    float fresnel = pow(1.0 - NdotV, 1.8);
 
-    // Blinn-Phong sun sparkle — cheap stand-in for sky highlights, gives the
-    // surface its characteristic glittering. Sun direction is fixed in world
-    // space; we don't have an IBL/sky to sample from.
-    float3 sunDir = normalize(float3(0.45, 0.78, 0.40));
+    // Light sky sparkle — kept very subtle. The reference is more glassy than
+    // sparkly; we don't want point highlights distracting from the wobble.
+    float3 sunDir = normalize(float3(0.40, 0.85, 0.30));
     float3 halfV  = normalize(sunDir + viewDir);
-    float sunSpec = pow(saturate(dot(rippleNormal, halfV)), 96.0);
+    float sunSpec = pow(saturate(dot(rippleNormal, halfV)), 80.0);
 
-    // Blue water tint, slightly view-angle dependent — looking straight down
-    // stays clear so submerged content reads, glancing angles bias richer so
-    // the water feels deeper out toward the horizon.
-    half tintAmount = half(mix(0.58, 0.85, 1.0 - NdotV));
-    half3 waterTint = half3(0.16, 0.46, 1.00);
-    half3 brightened = clamp(refraction + waterTint * half(0.45), half3(0.0), half3(1.0));
-    half3 tintedRefraction = mix(refraction, brightened, tintAmount);
+    // Near-neutral water tint — barely any blue cast. The reference reads as
+    // "clear water" rather than "pool water"; the colour comes from the
+    // reflection/refraction of the scene, not from a colour overlay.
+    half3 waterTint = half3(0.55, 0.62, 0.66);
+    half3 brightened = clamp(refraction + waterTint * half(0.10), half3(0.0), half3(1.0));
+    half3 tintedRefraction = mix(refraction, brightened, half(0.30));
 
-    // Glancing-angle reflection dominates; straight-down reflection nearly zero.
-    half reflectStrength = half(saturate(fresnel * 0.55));
+    // Reflection contributes substantially across the whole surface, not just
+    // at the horizon — this is what makes the water look wet and mirror-like.
+    half reflectStrength = half(saturate(fresnel * 0.85 + 0.15));
     half3 finalColor = mix(tintedRefraction, reflection, reflectStrength);
 
-    // Foam on the very brightest crests — narrow band of near-white at the
-    // peaks only. Keeps the rest of the surface clear and readable.
-    half foamMask = half(smoothstep(0.55, 0.85, float(crest)));
-    finalColor = mix(finalColor, half3(0.92, 0.96, 1.00), foamMask * half(0.45));
+    // Subtle sky sparkle.
+    finalColor += half3(1.00, 0.97, 0.90) * half(sunSpec) * half(0.35);
 
-    // Additive sun sparkle, warm-tinted.
-    finalColor += half3(1.00, 0.96, 0.85) * half(sunSpec) * half(0.60);
-
-    // Faint trough shading so peaks feel like peaks; tiny multiplier so we
-    // don't darken the water overall.
-    finalColor *= (half(1.0) - trough * half(0.06));
+    // Very faint trough darkening for depth cue.
+    finalColor *= (half(1.0) - trough * half(0.05));
 
     params.surface().set_base_color(finalColor);
     params.surface().set_normal(rippleNormal);
-    params.surface().set_roughness(half(0.04));
+    params.surface().set_roughness(half(0.03));
     params.surface().set_metallic(half(0.0));
-    // RealityKit alpha-blends behind the water, so the underwater content
-    // still shows through. Slightly higher than before since FBM + foam adds
-    // visual weight and we want the water to feel substantial.
-    params.surface().set_opacity(half(0.58) * half(edgeAlpha));
+    // Mostly opaque — the surface should read as a real wet/reflective layer
+    // sitting over the scene rather than a colour film over it. Underwater
+    // content shows through via the refraction sample, not via alpha-blend.
+    params.surface().set_opacity(half(0.85) * half(edgeAlpha));
 }
