@@ -103,18 +103,21 @@ void waterSurface(realitykit::surface_parameters params)
     const float3 worldPos = params.geometry().world_position();
     const float2 ruv      = worldPos.xz;
 
-    // Finite-difference ripple normal from the height field.
-    const float eps = 0.015;
-    float hX1 = ripples(ruv + float2(eps, 0.0), time);
-    float hX0 = ripples(ruv - float2(eps, 0.0), time);
-    float hZ1 = ripples(ruv + float2(0.0, eps), time);
-    float hZ0 = ripples(ruv - float2(0.0, eps), time);
+    // Finite-difference ripple normal from the height field. Smaller eps gives
+    // crisper micro-detail in the normal now that FBM contributes high octaves.
+    const float eps = 0.012;
+    float h    = ripples(ruv, time);
+    float hX1  = ripples(ruv + float2(eps, 0.0), time);
+    float hX0  = ripples(ruv - float2(eps, 0.0), time);
+    float hZ1  = ripples(ruv + float2(0.0, eps), time);
+    float hZ0  = ripples(ruv - float2(0.0, eps), time);
     float dHdx = (hX1 - hX0) / (2.0 * eps);
     float dHdz = (hZ1 - hZ0) / (2.0 * eps);
 
-    // Sparse ripples — gentle bump so submerged objects remain clearly
-    // visible through the water instead of being lost in distortion.
-    const float bumpStrength = 0.16;
+    // Gentle bump — submerged content must still be clearly readable through
+    // the water. Slightly stronger than before to take advantage of the richer
+    // FBM normal without crossing into "distorted glass" territory.
+    const float bumpStrength = 0.20;
     float3 rippleNormal = normalize(float3(-dHdx * bumpStrength,
                                             1.0,
                                            -dHdz * bumpStrength));
@@ -136,51 +139,75 @@ void waterSurface(realitykit::surface_parameters params)
 
     constexpr sampler camSampler(filter::linear, address::clamp_to_edge);
 
-    // ===== Refraction: warped view of what's BELOW the surface =====
-    // Light wobble — keep distortion subtle so the floor/legs/objects under
-    // the water are still clearly readable.
-    float2 refractUv = screenUv + float2(dHdx, dHdz) * 0.025;
-    refractUv = clamp(refractUv, 0.001, 0.999);
-    half3 refraction = half3(params.textures().custom().sample(camSampler, refractUv).rgb);
+    // ===== Refraction with subtle chromatic aberration =====
+    // RGB channels sample at slightly different offsets along the ripple
+    // gradient — gives the warped underwater view a prismatic edge that
+    // sells "real water" without being distracting.
+    float2 refractBase = screenUv + float2(dHdx, dHdz) * 0.028;
+    float2 ca = float2(dHdx, dHdz) * 0.006;
+    float2 uvR = clamp(refractBase + ca, 0.001, 0.999);
+    float2 uvG = clamp(refractBase,      0.001, 0.999);
+    float2 uvB = clamp(refractBase - ca, 0.001, 0.999);
+    half3 refraction = half3(
+        params.textures().custom().sample(camSampler, uvR).r,
+        params.textures().custom().sample(camSampler, uvG).g,
+        params.textures().custom().sample(camSampler, uvB).b
+    );
 
     // ===== Reflection: mirrored view of what's ABOVE =====
     float2 reflectUv = float2(screenUv.x, 1.0 - screenUv.y);
-    reflectUv += float2(dHdx * 0.03, dHdz * 0.06);
+    reflectUv += float2(dHdx * 0.04, dHdz * 0.07);
     reflectUv = clamp(reflectUv, 0.001, 0.999);
     half3 reflection = half3(params.textures().custom().sample(camSampler, reflectUv).rgb);
 
-    // Ripple bands.
-    float rippleHeight = ripples(ruv, time) - 0.5;
-    half shadow = half(saturate(0.5 - rippleHeight * 1.4));
-    half crest  = half(saturate(rippleHeight * 1.4));
+    // Ripple bands from the height field.
+    float rippleHeight = h - 0.5;
+    half crest  = half(saturate(rippleHeight * 1.6));
+    half trough = half(saturate(-rippleHeight * 1.4));
 
-    // Fresnel via view_direction (fragment → viewer).
+    // Fresnel via view_direction (fragment → viewer). Sharper curve = stronger
+    // reflection at glancing angles, near-clear when looking straight down.
     float3 viewDir = params.geometry().view_direction();
     float NdotV = saturate(dot(rippleNormal, viewDir));
-    float fresnel = pow(1.0 - NdotV, 3.5);
+    float fresnel = pow(1.0 - NdotV, 4.0);
 
-    // Strong, saturated blue water tint. Doubled additive lift and a 70%
-    // mix so the blue cast survives the 55% material opacity and still
-    // reads as obviously blue water on screen.
-    half3 waterTint = half3(0.18, 0.48, 1.00);
+    // Blinn-Phong sun sparkle — cheap stand-in for sky highlights, gives the
+    // surface its characteristic glittering. Sun direction is fixed in world
+    // space; we don't have an IBL/sky to sample from.
+    float3 sunDir = normalize(float3(0.45, 0.78, 0.40));
+    float3 halfV  = normalize(sunDir + viewDir);
+    float sunSpec = pow(saturate(dot(rippleNormal, halfV)), 96.0);
+
+    // Blue water tint, slightly view-angle dependent — looking straight down
+    // stays clear so submerged content reads, glancing angles bias richer so
+    // the water feels deeper out toward the horizon.
+    half tintAmount = half(mix(0.58, 0.85, 1.0 - NdotV));
+    half3 waterTint = half3(0.16, 0.46, 1.00);
     half3 brightened = clamp(refraction + waterTint * half(0.45), half3(0.0), half3(1.0));
-    half3 tintedRefraction = mix(refraction, brightened, half(0.70));
+    half3 tintedRefraction = mix(refraction, brightened, tintAmount);
 
-    // Reflection only kicks in at glancing angles — looking straight down
-    // shows almost no reflection so submerged content reads clearly.
-    half reflectStrength = half(saturate(fresnel * 0.40));
+    // Glancing-angle reflection dominates; straight-down reflection nearly zero.
+    half reflectStrength = half(saturate(fresnel * 0.55));
     half3 finalColor = mix(tintedRefraction, reflection, reflectStrength);
 
-    // Barely-there ripple highlights — additive only, no darkening,
-    // so the water keeps its light/clear character.
-    finalColor += half3(0.20, 0.30, 0.40) * crest * 0.25;
+    // Foam on the very brightest crests — narrow band of near-white at the
+    // peaks only. Keeps the rest of the surface clear and readable.
+    half foamMask = half(smoothstep(0.55, 0.85, float(crest)));
+    finalColor = mix(finalColor, half3(0.92, 0.96, 1.00), foamMask * half(0.45));
+
+    // Additive sun sparkle, warm-tinted.
+    finalColor += half3(1.00, 0.96, 0.85) * half(sunSpec) * half(0.60);
+
+    // Faint trough shading so peaks feel like peaks; tiny multiplier so we
+    // don't darken the water overall.
+    finalColor *= (half(1.0) - trough * half(0.06));
 
     params.surface().set_base_color(finalColor);
     params.surface().set_normal(rippleNormal);
     params.surface().set_roughness(half(0.04));
     params.surface().set_metallic(half(0.0));
-    // Lower opacity — RealityKit now alpha-blends our refraction layer with
-    // the AR camera feed directly behind the water, so the underwater
-    // content shows through even more clearly.
-    params.surface().set_opacity(half(0.55) * half(edgeAlpha));
+    // RealityKit alpha-blends behind the water, so the underwater content
+    // still shows through. Slightly higher than before since FBM + foam adds
+    // visual weight and we want the water to feel substantial.
+    params.surface().set_opacity(half(0.58) * half(edgeAlpha));
 }
