@@ -40,15 +40,27 @@ static float valueNoise(float2 p) {
     return mix(mix(a, b, f.x), mix(c, d, f.x), f.y);
 }
 
-// Two-octave drifting ripples. `uv` is in world-space meters.
-// Lower frequencies (1.2 and 3.0 instead of 3.5 and 8.0) = larger, fewer,
-// more visible individual waves instead of a dense ripple field.
+// Three-octave FBM in world-meter UV. Each octave drifts in a rotated
+// direction so the surface has natural, non-uniform structure: large slow
+// swells with finer chop riding on top. Output is normalised so it still sits
+// roughly in 0…1 like the original 2-octave noise (downstream crest/shadow
+// thresholds are tuned around that range).
 static float ripples(float2 uv, float t) {
-    float2 d1 = float2( 1.0,  0.6);
-    float2 d2 = float2(-0.7,  1.0);
-    float n1 = valueNoise(uv * 1.2 + d1 * (t * 0.25));
-    float n2 = valueNoise(uv * 3.0 + d2 * (t * 0.45));
-    return n1 * 0.70 + n2 * 0.30;
+    const float2x2 rot = float2x2( 0.80, -0.60,
+                                   0.60,  0.80);
+    float2 dir = float2(1.0, 0.6);
+    float sum = 0.0;
+    float amp = 0.55;
+    float freq = 1.0;
+    float norm = 0.0;
+    for (int i = 0; i < 3; i++) {
+        sum  += amp * valueNoise(uv * freq + dir * (t * (0.25 + 0.10 * float(i))));
+        norm += amp;
+        freq *= 2.35;
+        amp  *= 0.55;
+        dir   = rot * dir;
+    }
+    return sum / norm;
 }
 
 // MARK: - YpCbCr → RGB compute kernel
