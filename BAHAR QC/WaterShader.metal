@@ -103,8 +103,7 @@ void waterSurface(realitykit::surface_parameters params)
     const float3 worldPos = params.geometry().world_position();
     const float2 ruv      = worldPos.xz;
 
-    // Finite-difference ripple normal from the height field. Smaller eps gives
-    // crisper micro-detail in the normal now that FBM contributes high octaves.
+    // Finite-difference ripple normal from the height field.
     const float eps = 0.012;
     float h    = ripples(ruv, time);
     float hX1  = ripples(ruv + float2(eps, 0.0), time);
@@ -114,10 +113,11 @@ void waterSurface(realitykit::surface_parameters params)
     float dHdx = (hX1 - hX0) / (2.0 * eps);
     float dHdz = (hZ1 - hZ0) / (2.0 * eps);
 
-    // Gentle bump — submerged content must still be clearly readable through
-    // the water. Slightly stronger than before to take advantage of the richer
-    // FBM normal without crossing into "distorted glass" territory.
-    const float bumpStrength = 0.20;
+    // Heavy bump — pushes the surface toward a glassy, strongly-distorted look
+    // (matches the reference). The refraction/reflection UV warp below uses
+    // these gradients directly, so this dial controls "how wavy" the water
+    // reads to the eye.
+    const float bumpStrength = 0.45;
     float3 rippleNormal = normalize(float3(-dHdx * bumpStrength,
                                             1.0,
                                            -dHdz * bumpStrength));
