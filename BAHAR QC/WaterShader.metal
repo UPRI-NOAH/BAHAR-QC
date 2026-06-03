@@ -117,17 +117,16 @@ void waterSurface(realitykit::surface_parameters params)
     // dead zones at its peaks/troughs (gradient ≈ 0), which show up as flat,
     // undistorted patches. Strong baseline so every pixel rides obvious waves.
     float2 flowA = float2( sin(time * 0.55 + ruv.y * 0.7),
-                           cos(time * 0.40 + ruv.x * 0.5) ) * 1.10;
+                           cos(time * 0.40 + ruv.x * 0.5) ) * 0.60;
     float2 flowB = float2( cos(time * 0.30 + ruv.x * 1.1),
-                           sin(time * 0.45 + ruv.y * 0.9) ) * 0.85;
+                           sin(time * 0.45 + ruv.y * 0.9) ) * 0.45;
     dHdx += flowA.x + flowB.x;
     dHdz += flowA.y + flowB.y;
 
-    // Heavy bump — pushes the surface toward a glassy, strongly-distorted look
-    // (matches the reference). The refraction/reflection UV warp below uses
-    // these gradients directly, so this dial controls "how wavy" the water
-    // reads to the eye.
-    const float bumpStrength = 1.40;
+    // Heavy bump — used for the lighting normal. Refraction/reflection UV
+    // warps below use dHdx/dHdz directly (bump strength not applied), so
+    // those have their own warp coefficients.
+    const float bumpStrength = 0.55;
     float3 rippleNormal = normalize(float3(-dHdx * bumpStrength,
                                             1.0,
                                            -dHdz * bumpStrength));
