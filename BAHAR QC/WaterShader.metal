@@ -240,14 +240,13 @@ void waterSurface(realitykit::surface_parameters params)
     float3 halfV  = normalize(sunDir + viewDir);
     float sunSpec = pow(saturate(dot(rippleNormal, halfV)), 80.0);
 
-    // Stronger cool-blue tint applied to BOTH refraction (under water) AND
-    // reflection (mirror on the surface) — otherwise the blue only shows when
-    // looking down at the water, and glancing-angle reflections look grey.
-    half3 waterTint = half3(0.20, 0.50, 0.95);
-    half3 brightenedRefr = clamp(refraction + waterTint * half(0.35), half3(0.0), half3(1.0));
-    half3 tintedRefraction = mix(refraction, brightenedRefr, half(0.55));
-    half3 brightenedRefl = clamp(reflection + waterTint * half(0.30), half3(0.0), half3(1.0));
-    half3 tintedReflection = mix(reflection, brightenedRefl, half(0.45));
+    // Direct blend toward a water-blue target. Additive tinting clips out
+    // on bright camera content (white walls etc.), so we LERP both refraction
+    // and reflection toward the tint colour — that way bright pixels come
+    // through as pale blue rather than white, and dark pixels as deep blue.
+    half3 waterTint = half3(0.25, 0.60, 0.95);
+    half3 tintedRefraction = mix(refraction, waterTint, half(0.50));
+    half3 tintedReflection = mix(reflection, waterTint, half(0.40));
 
     // Fresnel-driven reflection: looking down at the water shows the warped
     // refraction (= heavy distortion of submerged content), looking flat at
