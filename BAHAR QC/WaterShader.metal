@@ -193,11 +193,11 @@ void waterSurface(realitykit::surface_parameters params)
     float3 halfV  = normalize(sunDir + viewDir);
     float sunSpec = pow(saturate(dot(rippleNormal, halfV)), 80.0);
 
-    // TEMPORARY DEBUG: bright red tint to verify shader updates are reaching
-    // the phone. If water looks red, deployment works. Revert this after.
-    half3 waterTint = half3(1.00, 0.05, 0.05);
-    half3 brightened = clamp(refraction + waterTint * half(0.80), half3(0.0), half3(1.0));
-    half3 tintedRefraction = mix(refraction, brightened, half(0.85));
+    // Very light cool tint — just a whisper of blue so the water reads as
+    // water without darkening the heavily-distorted underwater scene.
+    half3 waterTint = half3(0.45, 0.62, 0.85);
+    half3 brightened = clamp(refraction + waterTint * half(0.12), half3(0.0), half3(1.0));
+    half3 tintedRefraction = mix(refraction, brightened, half(0.22));
 
     // Fresnel-driven reflection: looking down at the water shows the warped
     // refraction (= heavy distortion of submerged content), looking flat at
