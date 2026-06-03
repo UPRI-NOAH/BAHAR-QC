@@ -238,7 +238,10 @@ struct ARContainerView: UIViewRepresentable {
             groundY = y
 
             let anchor = AnchorEntity(world: [0, y, 0])
-            let mesh = MeshResource.generatePlane(width: 30, depth: 30)
+            // Subdivided mesh so the vertex-displacement geometry modifier
+            // (waterGeometry in WaterShader.metal) has vertices to push up
+            // and down — a single quad would only displace at four corners.
+            let mesh = Self.makeSubdividedPlane(size: 30, subdivisions: 80)
 
             let entity = ModelEntity(mesh: mesh, materials: [makeWaterMaterial()])
             anchor.addChild(entity)
