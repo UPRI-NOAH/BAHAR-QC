@@ -255,7 +255,7 @@ void waterSurface(realitykit::surface_parameters params)
     // a hint of sky reflection even straight-down so the surface still reads
     // as water rather than a hole.
     half reflectStrength = half(saturate(fresnel * 1.00 + 0.05));
-    half3 finalColor = mix(tintedRefraction, reflection, reflectStrength);
+    half3 finalColor = mix(tintedRefraction, tintedReflection, reflectStrength);
 
     // Subtle sky sparkle.
     finalColor += half3(1.00, 0.97, 0.90) * half(sunSpec) * half(0.35);
