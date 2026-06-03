@@ -148,12 +148,13 @@ void waterSurface(realitykit::surface_parameters params)
 
     constexpr sampler camSampler(filter::linear, address::clamp_to_edge);
 
-    // ===== Refraction: very-strongly-warped view of what's BELOW =====
-    // The big UV-warp coefficient is the main "distortion" dial — values this
-    // high push the underwater scene into the visibly-rippled territory of
-    // the reference image. Reflection UV stays low so it remains mirror-like.
-    float2 refractBase = screenUv + float2(dHdx, dHdz) * 0.340;
-    float2 ca = float2(dHdx, dHdz) * 0.030;
+    // ===== Refraction: strongly-warped view of what's BELOW =====
+    // The warp coefficient is the main "distortion" dial. Sweet spot is ~0.15
+    // — past that, UVs get clamped to screen edges and distortion stops being
+    // visible (it just becomes a uniform edge-pixel sample). Reflection UV
+    // stays much lower so it remains mirror-like.
+    float2 refractBase = screenUv + float2(dHdx, dHdz) * 0.150;
+    float2 ca = float2(dHdx, dHdz) * 0.018;
     float2 uvR = clamp(refractBase + ca, 0.001, 0.999);
     float2 uvG = clamp(refractBase,      0.001, 0.999);
     float2 uvB = clamp(refractBase - ca, 0.001, 0.999);
