@@ -240,11 +240,12 @@ void waterSurface(realitykit::surface_parameters params)
     float3 halfV  = normalize(sunDir + viewDir);
     float sunSpec = pow(saturate(dot(rippleNormal, halfV)), 80.0);
 
-    // Very light cool tint — just a whisper of blue so the water reads as
-    // water without darkening the heavily-distorted underwater scene.
-    half3 waterTint = half3(0.45, 0.62, 0.85);
-    half3 brightened = clamp(refraction + waterTint * half(0.12), half3(0.0), half3(1.0));
-    half3 tintedRefraction = mix(refraction, brightened, half(0.22));
+    // Stronger cool-blue tint — the water reads clearly as blue water rather
+    // than colourless distortion. Still kept moderate so the heavy refraction
+    // distortion of submerged content remains readable through it.
+    half3 waterTint = half3(0.20, 0.50, 0.95);
+    half3 brightened = clamp(refraction + waterTint * half(0.35), half3(0.0), half3(1.0));
+    half3 tintedRefraction = mix(refraction, brightened, half(0.55));
 
     // Fresnel-driven reflection: looking down at the water shows the warped
     // refraction (= heavy distortion of submerged content), looking flat at
