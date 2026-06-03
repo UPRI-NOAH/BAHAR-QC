@@ -259,8 +259,13 @@ struct ARContainerView: UIViewRepresentable {
                 return fallbackWaterMaterial()
             }
             let surfaceShader = CustomMaterial.SurfaceShader(named: "waterSurface", in: library)
+            let geometryModifier = CustomMaterial.GeometryModifier(named: "waterGeometry", in: library)
             do {
-                var material = try CustomMaterial(surfaceShader: surfaceShader, lightingModel: .lit)
+                var material = try CustomMaterial(
+                    surfaceShader: surfaceShader,
+                    geometryModifier: geometryModifier,
+                    lightingModel: .lit
+                )
                 material.blending = .transparent(opacity: .init(floatLiteral: 1.0))
                 if let resource = cameraPipeline?.textureResource {
                     material.custom.texture = .init(resource)
@@ -270,6 +275,49 @@ struct ARContainerView: UIViewRepresentable {
                 onSessionError?("Water shader failed to load: \(error.localizedDescription)")
                 return fallbackWaterMaterial()
             }
+        }
+
+        /// Procedurally-built subdivided plane mesh. The default
+        /// `MeshResource.generatePlane` returns a single quad (4 vertices), so
+        /// per-vertex wave displacement only moves the corners. This builds a
+        /// proper grid of triangles so the geometry-modifier shader can shape
+        /// real waves across the surface.
+        private static func makeSubdividedPlane(size: Float, subdivisions: Int) -> MeshResource {
+            let count = subdivisions + 1
+            let half  = size * 0.5
+            var positions: [SIMD3<Float>] = []
+            var normals:   [SIMD3<Float>] = []
+            var uvs:       [SIMD2<Float>] = []
+            positions.reserveCapacity(count * count)
+            normals.reserveCapacity(count * count)
+            uvs.reserveCapacity(count * count)
+            for j in 0..<count {
+                for i in 0..<count {
+                    let u = Float(i) / Float(subdivisions)
+                    let v = Float(j) / Float(subdivisions)
+                    positions.append(SIMD3<Float>(u * size - half, 0, v * size - half))
+                    normals.append(SIMD3<Float>(0, 1, 0))
+                    uvs.append(SIMD2<Float>(u, v))
+                }
+            }
+            var indices: [UInt32] = []
+            indices.reserveCapacity(subdivisions * subdivisions * 6)
+            for j in 0..<subdivisions {
+                for i in 0..<subdivisions {
+                    let tl = UInt32(j * count + i)
+                    let tr = tl + 1
+                    let bl = tl + UInt32(count)
+                    let br = bl + 1
+                    indices.append(contentsOf: [tl, bl, tr, tr, bl, br])
+                }
+            }
+            var descriptor = MeshDescriptor(name: "subdividedWaterPlane")
+            descriptor.positions = MeshBuffers.Positions(positions)
+            descriptor.normals   = MeshBuffers.Normals(normals)
+            descriptor.textureCoordinates = MeshBuffers.TextureCoordinates(uvs)
+            descriptor.primitives = .triangles(indices)
+            // The mesh is simple and known-valid; force-try keeps the call site clean.
+            return try! MeshResource.generate(from: [descriptor])
         }
 
         private func fallbackWaterMaterial() -> any RealityKit.Material {
