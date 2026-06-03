@@ -160,10 +160,11 @@ void waterSurface(realitykit::surface_parameters params)
     constexpr sampler camSampler(filter::linear, address::clamp_to_edge);
 
     // ===== Refraction: heavily-warped view of what's BELOW =====
-    // Push the warp until the underwater scene itself bends (chair legs,
-    // pants, body) — not just surface ripple highlights. We lowered the flow
-    // above to keep this from clamping to screen edges.
-    float2 refractBase = screenUv + float2(dHdx, dHdz) * 0.300;
+    // With the gradient bounded above, this warp can go aggressive without
+    // hitting edge clamping. Max UV shift = gradLimit * coefficient = 1.6 *
+    // 0.28 ≈ 0.45 (just inside the safe range). The underwater scene should
+    // bend visibly, not just have ripple highlights painted on it.
+    float2 refractBase = screenUv + float2(dHdx, dHdz) * 0.280;
     float2 ca = float2(dHdx, dHdz) * 0.026;
     float2 uvR = clamp(refractBase + ca, 0.001, 0.999);
     float2 uvG = clamp(refractBase,      0.001, 0.999);
