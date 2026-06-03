@@ -150,13 +150,12 @@ void waterSurface(realitykit::surface_parameters params)
 
     constexpr sampler camSampler(filter::linear, address::clamp_to_edge);
 
-    // ===== Refraction: strongly-warped view of what's BELOW =====
-    // The warp coefficient is the main "distortion" dial. Sweet spot is ~0.15
-    // — past that, UVs get clamped to screen edges and distortion stops being
-    // visible (it just becomes a uniform edge-pixel sample). Reflection UV
-    // stays much lower so it remains mirror-like.
-    float2 refractBase = screenUv + float2(dHdx, dHdz) * 0.150;
-    float2 ca = float2(dHdx, dHdz) * 0.018;
+    // ===== Refraction: heavily-warped view of what's BELOW =====
+    // Push the warp until the underwater scene itself bends (chair legs,
+    // pants, body) — not just surface ripple highlights. We lowered the flow
+    // above to keep this from clamping to screen edges.
+    float2 refractBase = screenUv + float2(dHdx, dHdz) * 0.300;
+    float2 ca = float2(dHdx, dHdz) * 0.026;
     float2 uvR = clamp(refractBase + ca, 0.001, 0.999);
     float2 uvG = clamp(refractBase,      0.001, 0.999);
     float2 uvB = clamp(refractBase - ca, 0.001, 0.999);
