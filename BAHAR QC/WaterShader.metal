@@ -183,26 +183,38 @@ void waterSurface(realitykit::surface_parameters params)
     constexpr sampler camSampler(filter::linear, address::clamp_to_edge);
 
     // ===== Refraction: heavily-warped view of what's BELOW =====
-    // Two-layer warp:
-    //  (a) the main gradient (dHdx/dHdz) — drives the BIG wave distortion that
-    //      matches the vertex-displaced surface waves.
-    //  (b) an extra high-frequency "chop" noise layer — tight localized warp
-    //      that visibly bends the silhouette of submerged objects.
-    // The chop term is independent of the vertex waves, so the surface wave
-    // shape stays as the user likes while underwater objects get extra bend.
-    const float chopFreq = 3.5;
+    // Three-layer warp for dramatic submerged-object distortion:
+    //  (a) main gradient (dHdx/dHdz) — big wave distortion matching the
+    //      vertex-displaced surface waves.
+    //  (b) MID chop noise — tight medium-frequency warp.
+    //  (c) FINE chop noise — even finer, faster-drifting warp.
+    // Combining frequencies makes silhouettes of submerged objects bend at
+    // multiple scales (overall curve + localized wobbles + micro-shimmer)
+    // without any one layer needing extreme UV shift.
     const float chopEps  = 0.008;
-    float chopX1 = ripples((ruv + float2(chopEps, 0.0)) * chopFreq, time * 1.4);
-    float chopX0 = ripples((ruv - float2(chopEps, 0.0)) * chopFreq, time * 1.4);
-    float chopZ1 = ripples((ruv + float2(0.0, chopEps)) * chopFreq, time * 1.4);
-    float chopZ0 = ripples((ruv - float2(0.0, chopEps)) * chopFreq, time * 1.4);
-    float dCdx   = (chopX1 - chopX0) / (2.0 * chopEps);
-    float dCdz   = (chopZ1 - chopZ0) / (2.0 * chopEps);
 
-    float2 mainWarp  = float2(dHdx, dHdz) * 0.250;
-    float2 chopWarp  = float2(dCdx, dCdz) * 0.080;
-    float2 refractBase = screenUv + mainWarp + chopWarp;
-    float2 ca = (mainWarp + chopWarp) * 0.10;
+    const float midFreq = 2.8;
+    float mX1 = ripples((ruv + float2(chopEps, 0.0)) * midFreq, time * 1.3);
+    float mX0 = ripples((ruv - float2(chopEps, 0.0)) * midFreq, time * 1.3);
+    float mZ1 = ripples((ruv + float2(0.0, chopEps)) * midFreq, time * 1.3);
+    float mZ0 = ripples((ruv - float2(0.0, chopEps)) * midFreq, time * 1.3);
+    float dMdx = (mX1 - mX0) / (2.0 * chopEps);
+    float dMdz = (mZ1 - mZ0) / (2.0 * chopEps);
+
+    const float fineFreq = 6.5;
+    float fX1 = ripples((ruv + float2(chopEps, 0.0)) * fineFreq, time * 2.0 + 11.7);
+    float fX0 = ripples((ruv - float2(chopEps, 0.0)) * fineFreq, time * 2.0 + 11.7);
+    float fZ1 = ripples((ruv + float2(0.0, chopEps)) * fineFreq, time * 2.0 + 11.7);
+    float fZ0 = ripples((ruv - float2(0.0, chopEps)) * fineFreq, time * 2.0 + 11.7);
+    float dFdx = (fX1 - fX0) / (2.0 * chopEps);
+    float dFdz = (fZ1 - fZ0) / (2.0 * chopEps);
+
+    float2 mainWarp = float2(dHdx, dHdz) * 0.260;
+    float2 midWarp  = float2(dMdx, dMdz) * 0.180;
+    float2 fineWarp = float2(dFdx, dFdz) * 0.090;
+    float2 totalWarp = mainWarp + midWarp + fineWarp;
+    float2 refractBase = screenUv + totalWarp;
+    float2 ca = totalWarp * 0.08;
     float2 uvR = clamp(refractBase + ca, 0.001, 0.999);
     float2 uvG = clamp(refractBase,      0.001, 0.999);
     float2 uvB = clamp(refractBase - ca, 0.001, 0.999);
