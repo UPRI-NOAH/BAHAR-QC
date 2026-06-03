@@ -127,7 +127,7 @@ void waterSurface(realitykit::surface_parameters params)
     // (matches the reference). The refraction/reflection UV warp below uses
     // these gradients directly, so this dial controls "how wavy" the water
     // reads to the eye.
-    const float bumpStrength = 0.95;
+    const float bumpStrength = 1.40;
     float3 rippleNormal = normalize(float3(-dHdx * bumpStrength,
                                             1.0,
                                            -dHdz * bumpStrength));
