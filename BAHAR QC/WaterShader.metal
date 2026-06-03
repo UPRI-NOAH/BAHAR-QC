@@ -183,12 +183,26 @@ void waterSurface(realitykit::surface_parameters params)
     constexpr sampler camSampler(filter::linear, address::clamp_to_edge);
 
     // ===== Refraction: heavily-warped view of what's BELOW =====
-    // With the gradient bounded above, this warp can go aggressive without
-    // hitting edge clamping. Max UV shift = gradLimit * coefficient = 1.6 *
-    // 0.28 ≈ 0.45 (just inside the safe range). The underwater scene should
-    // bend visibly, not just have ripple highlights painted on it.
-    float2 refractBase = screenUv + float2(dHdx, dHdz) * 0.280;
-    float2 ca = float2(dHdx, dHdz) * 0.026;
+    // Two-layer warp:
+    //  (a) the main gradient (dHdx/dHdz) — drives the BIG wave distortion that
+    //      matches the vertex-displaced surface waves.
+    //  (b) an extra high-frequency "chop" noise layer — tight localized warp
+    //      that visibly bends the silhouette of submerged objects.
+    // The chop term is independent of the vertex waves, so the surface wave
+    // shape stays as the user likes while underwater objects get extra bend.
+    const float chopFreq = 3.5;
+    const float chopEps  = 0.008;
+    float chopX1 = ripples((ruv + float2(chopEps, 0.0)) * chopFreq, time * 1.4);
+    float chopX0 = ripples((ruv - float2(chopEps, 0.0)) * chopFreq, time * 1.4);
+    float chopZ1 = ripples((ruv + float2(0.0, chopEps)) * chopFreq, time * 1.4);
+    float chopZ0 = ripples((ruv - float2(0.0, chopEps)) * chopFreq, time * 1.4);
+    float dCdx   = (chopX1 - chopX0) / (2.0 * chopEps);
+    float dCdz   = (chopZ1 - chopZ0) / (2.0 * chopEps);
+
+    float2 mainWarp  = float2(dHdx, dHdz) * 0.250;
+    float2 chopWarp  = float2(dCdx, dCdz) * 0.080;
+    float2 refractBase = screenUv + mainWarp + chopWarp;
+    float2 ca = (mainWarp + chopWarp) * 0.10;
     float2 uvR = clamp(refractBase + ca, 0.001, 0.999);
     float2 uvG = clamp(refractBase,      0.001, 0.999);
     float2 uvB = clamp(refractBase - ca, 0.001, 0.999);
