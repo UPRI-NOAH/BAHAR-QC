@@ -165,12 +165,13 @@ void waterSurface(realitykit::surface_parameters params)
         params.textures().custom().sample(camSampler, uvB).b
     );
 
-    // ===== Reflection: mirrored view of what's ABOVE =====
-    // Very low warp on the reflection UV — the mirror image stays mostly
-    // coherent, just gently wobbling with the ripples. Refraction (above)
-    // keeps the heavy wobble for the underwater distortion look.
+    // ===== Reflection: mirrored view of what's ABOVE, also wobbled =====
+    // Reference image has heavy distortion on the *reflected* content too
+    // (the guy's torso reflected onto the water is wavy, not crisp mirror).
+    // Still lighter than refraction warp so it reads as reflection rather
+    // than chaos.
     float2 reflectUv = float2(screenUv.x, 1.0 - screenUv.y);
-    reflectUv += float2(dHdx * 0.02, dHdz * 0.03);
+    reflectUv += float2(dHdx * 0.10, dHdz * 0.12);
     reflectUv = clamp(reflectUv, 0.001, 0.999);
     half3 reflection = half3(params.textures().custom().sample(camSampler, reflectUv).rgb);
 
