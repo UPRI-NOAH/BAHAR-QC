@@ -97,7 +97,9 @@ struct ARContainerView: UIViewRepresentable {
         private var lastUnderwater: Bool = false
         private var cameraFrameTick: Int = 0
 
-        private let minFloorArea: Float = 0.15
+        // 1.5 m² minimum — excludes chair seats (~0.16 m²) and most desk
+        // surfaces (~0.9 m²), keeps real room floors.
+        private let minFloorArea: Float = 1.5
         private let reanchorEpsilon: Float = 0.05
         private let estimatedFloorOffset: Float = 1.4
 
