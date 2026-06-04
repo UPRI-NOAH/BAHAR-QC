@@ -242,9 +242,15 @@ struct ARContainerView: UIViewRepresentable {
                 install(at: newY)
                 groundIsEstimate = false
             } else if groundIsEstimate {
-                groundY = newY
-                waterAnchor?.transform.translation = [0, newY, 0]
-                groundIsEstimate = false
+                // Replacing the initial camera-height estimate with a real
+                // plane — only adopt if it's lower-or-equal. Otherwise the
+                // water would jump UP to e.g. a desk-height plane the moment
+                // ARKit detects one.
+                if let current = groundY, newY <= current + reanchorEpsilon {
+                    groundY = newY
+                    waterAnchor?.transform.translation = [0, newY, 0]
+                    groundIsEstimate = false
+                }
             } else if let current = groundY, newY < current - reanchorEpsilon {
                 groundY = newY
                 waterAnchor?.transform.translation = [0, newY, 0]
