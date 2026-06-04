@@ -96,6 +96,11 @@ struct ARContainerView: UIViewRepresentable {
 
         private var lastUnderwater: Bool = false
         private var cameraFrameTick: Int = 0
+        // Lowest camera Y observed during this AR session. Used as a robust
+        // floor estimate when ARKit fails to detect the real floor plane —
+        // the camera-min minus a small offset is reliably at-or-near floor
+        // level no matter how the user is holding the phone.
+        private var lowestCameraY: Float?
 
         // 1.5 m² minimum — excludes chair seats (~0.16 m²) and most desk
         // surfaces (~0.9 m²), keeps real room floors.
