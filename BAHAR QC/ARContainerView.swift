@@ -141,8 +141,13 @@ struct ARContainerView: UIViewRepresentable {
         private func applyDepth() {
             guard let entity = waterEntity else { return }
             let depthF = Float(currentDepth)
-            let height = max(depthF, 0.001)
-            entity.transform.translation = [0, height, 0]
+            // Visual height is compressed — MMDA PATV "gutter deep" can be up
+            // to 0.25 m which still reads as ankle-height water in AR. Halve
+            // the displayed height so the AR scene matches the intuitive
+            // mental image of the gauge label. The accurate depth value still
+            // drives the gauge text, category colour, and wave amplitude.
+            let visualHeight = max(depthF * 0.5, 0.001)
+            entity.transform.translation = [0, visualHeight, 0]
 
             // Push the depth into the water material's custom parameter so
             // the geometry-modifier shader can scale wave amplitude to it —
