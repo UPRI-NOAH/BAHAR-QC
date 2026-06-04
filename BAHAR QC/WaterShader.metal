@@ -256,13 +256,11 @@ void waterSurface(realitykit::surface_parameters params)
     float3 halfV  = normalize(sunDir + viewDir);
     float sunSpec = pow(saturate(dot(rippleNormal, halfV)), 80.0);
 
-    // Direct blend toward a water-blue target. Additive tinting clips out
-    // on bright camera content (white walls etc.), so we LERP both refraction
-    // and reflection toward the tint colour — that way bright pixels come
-    // through as pale blue rather than white, and dark pixels as deep blue.
-    half3 waterTint = half3(0.25, 0.60, 0.95);
-    half3 tintedRefraction = mix(refraction, waterTint, half(0.50));
-    half3 tintedReflection = mix(reflection, waterTint, half(0.40));
+    // DEBUG: neon green to verify deploy. If you see green water, this build
+    // IS reaching the phone — revert this and the visual height hack.
+    half3 waterTint = half3(0.05, 1.00, 0.30);
+    half3 tintedRefraction = mix(refraction, waterTint, half(0.85));
+    half3 tintedReflection = mix(reflection, waterTint, half(0.75));
 
     // Fresnel-driven reflection: looking down at the water shows the warped
     // refraction (= heavy distortion of submerged content), looking flat at
