@@ -110,12 +110,14 @@ void waterGeometry(realitykit::geometry_parameters params)
     const float2 uv = modelPos.xz;
     const float  h  = ripples(uv, time);
     // Wave amplitude scales with flood depth (passed in custom_parameter.x
-    // from ARContainerView.applyDepth). Shallow PATV/gutter water gets small
-    // waves; deeper waist/chest water gets bigger ones. Cap so very deep
-    // floods don't become stormy oceans.
+    // from ARContainerView.applyDepth). Heavily tilted toward small for
+    // shallow water so PATV/gutter floods look like a thin water film, not
+    // an ankle-eating wave field. Only NPLV/NPATV depths get real waves.
+    // Offset is also biased DOWN (-0.75) so the wave peaks stay close to the
+    // actual flood level rather than poking visibly above it.
     const float depth     = params.uniforms().custom_parameter().x;
-    const float amplitude = clamp(depth * 0.30, 0.01, 0.25);
-    const float offset    = (h - 0.5) * 2.0 * amplitude;
+    const float amplitude = clamp(depth * 0.12, 0.003, 0.18);
+    const float offset    = (h - 0.75) * 2.0 * amplitude;
     params.geometry().set_model_position_offset(float3(0.0, offset, 0.0));
 }
 
