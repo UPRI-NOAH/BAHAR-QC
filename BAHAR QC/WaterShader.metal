@@ -261,13 +261,13 @@ void waterSurface(realitykit::surface_parameters params)
     // on bright camera content (white walls etc.), so we LERP both refraction
     // and reflection toward the tint colour — that way bright pixels come
     // through as pale blue rather than white, and dark pixels as deep blue.
-    // Slightly deeper blue + a touch less luminance — the previous tint read
-    // a little chalky. Keep refraction the dominant blend so submerged objects
-    // are visibly tinted, but knock the value down so the surface feels like
-    // water with body to it rather than a backlit blue scrim.
-    half3 waterTint = half3(0.18, 0.48, 0.82);
-    half3 tintedRefraction = mix(refraction, waterTint, half(0.55));
-    half3 tintedReflection = mix(reflection, waterTint, half(0.42));
+    // Desaturated cool grey-blue — matches the reference where water reads
+    // as nearly colorless clear liquid taking on a faint cool cast. The
+    // camera content (refraction + reflection) should dominate; the tint
+    // is just a soft body colour, not a strong wash.
+    half3 waterTint = half3(0.55, 0.66, 0.74);
+    half3 tintedRefraction = mix(refraction, waterTint, half(0.22));
+    half3 tintedReflection = mix(reflection, waterTint, half(0.12));
 
     // Fresnel-driven reflection: looking down at the water shows the warped
     // refraction (= heavy distortion of submerged content), looking flat at
