@@ -488,8 +488,10 @@ private struct ARSessionView: View {
         .glassCard(cornerRadius: 14)
     }
 
-    /// Tiny warning badge by default — just the category-coloured icon in a
-    /// glass-circle button. Tap to expand into a card with the advisory text.
+    /// Tiny warning badge — category-coloured icon in a glass circle, fixed
+    /// 44×44 so the row stays symmetric with the 56-pt camera button on the
+    /// right. Tap to reveal the advisory text as a popover anchored above
+    /// the button, so the layout never reflows.
     @ViewBuilder
     private var guidelinesCard: some View {
         Button {
@@ -497,12 +499,20 @@ private struct ARSessionView: View {
                 showHotlines.toggle()
             }
         } label: {
+            Image(systemName: guidelinesIcon)
+                .font(.title2.weight(.bold))
+                .foregroundStyle(MMDATheme.color(for: gauge.category))
+                .frame(width: 44, height: 44)
+                .glassCard(cornerRadius: 22)
+        }
+        .accessibilityLabel(showHotlines ? "Hide flood advisory" : "Show flood advisory")
+        .overlay(alignment: .bottomLeading) {
             if showHotlines {
                 HStack(alignment: .top, spacing: 10) {
                     Image(systemName: guidelinesIcon)
                         .font(.title3.weight(.bold))
                         .foregroundStyle(MMDATheme.color(for: gauge.category))
-                        .frame(width: 28, height: 28)
+                        .frame(width: 24, height: 24)
                     Text(guidelinesText)
                         .font(.footnote.weight(.semibold))
                         .foregroundStyle(.white)
@@ -511,17 +521,14 @@ private struct ARSessionView: View {
                 }
                 .padding(.horizontal, 12)
                 .padding(.vertical, 10)
-                .frame(maxWidth: .infinity, alignment: .leading)
+                .frame(width: 260, alignment: .leading)
                 .glassCard()
-            } else {
-                Image(systemName: guidelinesIcon)
-                    .font(.title2.weight(.bold))
-                    .foregroundStyle(MMDATheme.color(for: gauge.category))
-                    .frame(width: 44, height: 44)
-                    .glassCard(cornerRadius: 22)
+                // Float the card above the button — leaves the bottom row
+                // (warning + camera) symmetric and unchanged.
+                .offset(y: -56)
+                .transition(.opacity.combined(with: .move(edge: .bottom)))
             }
         }
-        .accessibilityLabel(showHotlines ? "Hide flood advisory" : "Show flood advisory")
     }
 
     // MARK: - HUD bindings
