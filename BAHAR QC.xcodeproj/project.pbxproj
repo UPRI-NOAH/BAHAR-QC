@@ -712,7 +712,7 @@
 				INFOPLIST_KEY_LSApplicationCategoryType = "";
 				INFOPLIST_KEY_NSCameraUsageDescription = "Used to show flood depth in AR over your surroundings";
 				INFOPLIST_KEY_NSLocationWhenInUseUsageDescription = "Used to look up flood depth at your current location";
-				INFOPLIST_KEY_NSPhotoLibraryAddUsageDescription = "BAHAR QC saves your AR snapshots to your Photos library.";
+				INFOPLIST_KEY_NSPhotoLibraryAddUsageDescription = "BAHAR saves your AR snapshots to your Photos library.";
 				"INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=iphoneos*]" = YES;
 				"INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=iphonesimulator*]" = YES;
 				"INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents[sdk=iphoneos*]" = YES;
@@ -763,7 +763,7 @@
 				INFOPLIST_KEY_LSApplicationCategoryType = "";
 				INFOPLIST_KEY_NSCameraUsageDescription = "Used to show flood depth in AR over your surroundings";
 				INFOPLIST_KEY_NSLocationWhenInUseUsageDescription = "Used to look up flood depth at your current location";
-				INFOPLIST_KEY_NSPhotoLibraryAddUsageDescription = "BAHAR QC saves your AR snapshots to your Photos library.";
+				INFOPLIST_KEY_NSPhotoLibraryAddUsageDescription = "BAHAR saves your AR snapshots to your Photos library.";
 				"INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=iphoneos*]" = YES;
 				"INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=iphonesimulator*]" = YES;
 				"INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents[sdk=iphoneos*]" = YES;
