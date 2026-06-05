@@ -400,18 +400,26 @@ private struct ARSessionView: View {
         return "CHEST LEVEL"
     }
 
-    /// Body-part emoji that visually corresponds to the depth tier. Boot
-    /// (side view, includes ankle) for the lowest gutter tier instead of the
-    /// foot sole-print which doesn't read as "water at ankle level".
+    /// Body-part emoji that visually corresponds to the depth tier.
+    /// Gutter (ankle) tier uses a custom image asset instead — see
+    /// `humanScaleAssetName` below.
     private var humanScaleEmoji: String {
         let inches = depth * 39.3700787
-        if inches < 10 { return "🥾" }
+        if inches < 10 { return "" }       // handled by FootIcon asset
         if inches < 13 { return "🦵" }
         if inches < 19 { return "🦵" }
         if inches < 26 { return "🦵" }
         if inches < 37 { return "🚴" }
         if inches < 45 { return "🧍" }
         return "👤"
+    }
+
+    /// Custom asset name override for tiers where the Apple emoji rendering
+    /// is wrong (e.g. 🦶 renders as a sole-print, not the side-view we want).
+    private var humanScaleAssetName: String? {
+        let inches = depth * 39.3700787
+        if inches < 10 { return "FootIcon" }
+        return nil
     }
 
     /// Depth in both imperial and metric: e.g. `8" / ~0.20 m`.
