@@ -491,69 +491,40 @@ private struct ARSessionView: View {
         .glassCard(cornerRadius: 14)
     }
 
-    /// Compact safety advisory. Tap the warning icon to expand and show
-    /// emergency hotlines. Heading text removed — the icon + colour carry
-    /// the meaning.
+    /// Tiny warning badge by default — just the category-coloured icon in a
+    /// glass-circle button. Tap to expand into a card with the advisory text.
+    @ViewBuilder
     private var guidelinesCard: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            HStack(alignment: .top, spacing: 10) {
-                Button {
-                    withAnimation(.easeInOut(duration: 0.22)) {
-                        showHotlines.toggle()
-                    }
-                } label: {
+        Button {
+            withAnimation(.easeInOut(duration: 0.22)) {
+                showHotlines.toggle()
+            }
+        } label: {
+            if showHotlines {
+                HStack(alignment: .top, spacing: 10) {
                     Image(systemName: guidelinesIcon)
                         .font(.title3.weight(.bold))
                         .foregroundStyle(MMDATheme.color(for: gauge.category))
                         .frame(width: 28, height: 28)
-                        .background(Color.white.opacity(0.08), in: Circle())
-                        .overlay(
-                            Circle().stroke(Color.white.opacity(0.18), lineWidth: 1)
-                        )
+                    Text(guidelinesText)
+                        .font(.footnote.weight(.semibold))
+                        .foregroundStyle(.white)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .frame(maxWidth: .infinity, alignment: .leading)
                 }
-                .accessibilityLabel(showHotlines ? "Hide emergency hotlines" : "Show emergency hotlines")
-
-                Text(guidelinesText)
-                    .font(.footnote.weight(.semibold))
-                    .foregroundStyle(.white)
-                    .fixedSize(horizontal: false, vertical: true)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-
-                Image(systemName: showHotlines ? "chevron.up" : "chevron.down")
-                    .font(.caption.weight(.bold))
-                    .foregroundStyle(.white.opacity(0.6))
-            }
-
-            if showHotlines {
-                Divider().background(Color.white.opacity(0.20))
-                VStack(alignment: .leading, spacing: 4) {
-                    hotlineRow(label: "Emergency", number: "911")
-                    hotlineRow(label: "MMDA",      number: "136")
-                    hotlineRow(label: "NDRRMC",    number: "(02) 8911-1406")
-                    hotlineRow(label: "Red Cross", number: "143")
-                }
-                .transition(.opacity.combined(with: .move(edge: .top)))
+                .padding(.horizontal, 12)
+                .padding(.vertical, 10)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .glassCard()
+            } else {
+                Image(systemName: guidelinesIcon)
+                    .font(.title2.weight(.bold))
+                    .foregroundStyle(MMDATheme.color(for: gauge.category))
+                    .frame(width: 44, height: 44)
+                    .glassCard(cornerRadius: 22)
             }
         }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(.horizontal, 12)
-        .padding(.vertical, 10)
-        .glassCard()
-    }
-
-    @ViewBuilder
-    private func hotlineRow(label: String, number: String) -> some View {
-        HStack(spacing: 6) {
-            Text(label)
-                .font(.caption2.weight(.semibold))
-                .foregroundStyle(.white.opacity(0.70))
-            Spacer(minLength: 6)
-            Link(destination: URL(string: "tel:\(number.filter { !$0.isWhitespace && $0 != "(" && $0 != ")" && $0 != "-" })")!) {
-                Text(number)
-                    .font(.system(.caption, design: .monospaced).weight(.bold))
-                    .foregroundStyle(.white)
-            }
-        }
+        .accessibilityLabel(showHotlines ? "Hide flood advisory" : "Show flood advisory")
     }
 
     // MARK: - HUD bindings
