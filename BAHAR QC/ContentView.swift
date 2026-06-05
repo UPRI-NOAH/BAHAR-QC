@@ -212,7 +212,7 @@ private struct ARSessionView: View {
     @State private var snapshotImage: UIImage?
     @State private var showingShareSheet = false
     @State private var thumbnailVisible = false
-    @State private var thumbnailDragOffset: CGFloat = 0
+    @State private var thumbnailDragOffset: CGSize = .zero
 
     // Guidelines / hotlines expansion state.
     @State private var showHotlines = false
