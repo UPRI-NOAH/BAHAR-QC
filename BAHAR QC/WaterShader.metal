@@ -40,12 +40,13 @@ static float valueNoise(float2 p) {
     return mix(mix(a, b, f.x), mix(c, d, f.x), f.y);
 }
 
-// Three-octave FBM in world-meter UV — tuned for natural-looking, longer
-// wavelengths rather than tight chop. Low base frequency (0.55) gives big
-// slow swells; each successive octave layers finer ripples on top without
-// drowning the surface in micro-detail. Each octave drifts in a rotated
-// direction so the surface has non-uniform structure.
+// Height field = three-octave FBM + two cross-directional swells. The FBM
+// gives non-uniform chaotic structure but has flat dead zones at its peaks
+// and troughs; the directional sine swells fill those in so big, slow waves
+// are visible everywhere on the surface, not just in patches. Base FBM
+// frequency (0.55) keeps wavelengths long and natural-looking.
 static float ripples(float2 uv, float t) {
+    // FBM body.
     const float2x2 rot = float2x2( 0.80, -0.60,
                                    0.60,  0.80);
     float2 dir = float2(1.0, 0.6);
@@ -60,7 +61,18 @@ static float ripples(float2 uv, float t) {
         amp  *= 0.55;
         dir   = rot * dir;
     }
-    return sum / norm;
+    float fbm = sum / norm;
+
+    // Cross-directional swells — guarantee a non-zero wave component at every
+    // point. Two orthogonal directions with slightly different frequencies and
+    // phase speeds so they beat against each other instead of locking into a
+    // fixed pattern. Mapped to 0..1 so they sum coherently with the FBM.
+    float swell1 = sin(uv.x * 0.85 + uv.y * 0.35 + t * 0.55) * 0.5 + 0.5;
+    float swell2 = sin(uv.x * 0.30 - uv.y * 0.90 + t * 0.40) * 0.5 + 0.5;
+    float swells = (swell1 + swell2) * 0.5;
+
+    // 65% FBM (chaotic structure) + 35% swells (universal coverage).
+    return fbm * 0.65 + swells * 0.35;
 }
 
 // MARK: - YpCbCr → RGB compute kernel
