@@ -79,6 +79,34 @@ private extension View {
     }
 }
 
+// MARK: - Share sheet (UIActivityViewController wrapper)
+
+#if os(iOS)
+private struct ShareSheet: UIViewControllerRepresentable {
+    let items: [Any]
+    func makeUIViewController(context: Context) -> UIActivityViewController {
+        UIActivityViewController(activityItems: items, applicationActivities: nil)
+    }
+    func updateUIViewController(_ uiViewController: UIActivityViewController, context: Context) {}
+}
+
+/// Captures the current key window — includes the live ARView Metal feed,
+/// the SwiftUI glassmorphic HUD overlay, and the water shader output, all
+/// flattened into a single UIImage.
+private func captureKeyWindow() -> UIImage? {
+    guard let window = UIApplication.shared.connectedScenes
+        .compactMap({ $0 as? UIWindowScene })
+        .flatMap({ $0.windows })
+        .first(where: { $0.isKeyWindow }) else { return nil }
+    let renderer = UIGraphicsImageRenderer(bounds: window.bounds)
+    return renderer.image { _ in
+        // `afterScreenUpdates: false` captures the current frame including
+        // Metal-rendered content (ARKit camera feed + RealityKit water).
+        window.drawHierarchy(in: window.bounds, afterScreenUpdates: false)
+    }
+}
+#endif
+
 // MARK: - Landing
 
 private struct LandingView: View {
