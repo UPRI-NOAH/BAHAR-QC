@@ -302,6 +302,50 @@ private struct ARSessionView: View {
 
     // MARK: - HUD components
 
+    /// Translucent NOAH logo, top-left. Branding without obscuring the camera.
+    @ViewBuilder
+    private var noahLogoOverlay: some View {
+        if let uiImage = UIImage(named: "NOAH LOGO") {
+            Image(uiImage: uiImage)
+                .resizable()
+                .aspectRatio(contentMode: .fit)
+                .frame(maxWidth: 90, maxHeight: 36)
+                .opacity(0.55)
+        }
+    }
+
+    /// iOS-screenshot-style thumbnail of the most recent snapshot. Slides in
+    /// from the bottom-left after capture; tap to open a share sheet that
+    /// lets the user save to Photos or share elsewhere. Auto-dismisses.
+    @ViewBuilder
+    private var snapshotThumbnail: some View {
+        if thumbnailVisible, let img = snapshotImage {
+            Button {
+                showingShareSheet = true
+            } label: {
+                Image(uiImage: img)
+                    .resizable()
+                    .scaledToFill()
+                    .frame(width: 64, height: 96)
+                    .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 10, style: .continuous)
+                            .stroke(Color.white.opacity(0.55), lineWidth: 1.5)
+                    )
+                    .shadow(color: .black.opacity(0.35), radius: 8, x: 0, y: 4)
+                    .overlay(alignment: .bottomTrailing) {
+                        Image(systemName: "square.and.arrow.up.fill")
+                            .font(.caption2.weight(.bold))
+                            .foregroundStyle(.white)
+                            .padding(5)
+                            .background(Color.black.opacity(0.55), in: Circle())
+                            .padding(4)
+                    }
+            }
+            .transition(.move(edge: .leading).combined(with: .opacity))
+        }
+    }
+
     /// Top-centre floating GPS pill. Glowing dot signals fix quality.
     private var gpsCapsule: some View {
         HStack(spacing: 8) {
