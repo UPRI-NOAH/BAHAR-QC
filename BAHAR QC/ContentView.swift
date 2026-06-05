@@ -391,10 +391,12 @@ private struct ARSessionView: View {
         return "CHEST LEVEL"
     }
 
-    /// Body-part emoji that visually corresponds to the depth tier.
+    /// Body-part emoji that visually corresponds to the depth tier. Boot
+    /// (side view, includes ankle) for the lowest gutter tier instead of the
+    /// foot sole-print which doesn't read as "water at ankle level".
     private var humanScaleEmoji: String {
         let inches = depth * 39.3700787
-        if inches < 10 { return "🦶" }
+        if inches < 10 { return "🥾" }
         if inches < 13 { return "🦵" }
         if inches < 19 { return "🦵" }
         if inches < 26 { return "🦵" }
