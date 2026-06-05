@@ -113,16 +113,23 @@ private struct LandingView: View {
     let onStart: () -> Void
 
     @ViewBuilder
-    private var noahLogo: some View {
+    private var partnerLogos: some View {
         #if os(iOS)
-        if let uiImage = UIImage(named: "NOAH LOGO") {
-            Image(uiImage: uiImage)
-                .resizable()
-                .aspectRatio(contentMode: .fit)
-                // Soft white glow so the black strokes don't get lost on dark
-                // backgrounds. Matches the in-AR overlay treatment.
-                .shadow(color: .white.opacity(0.55), radius: 6, x: 0, y: 0)
-                .shadow(color: .white.opacity(0.40), radius: 12, x: 0, y: 0)
+        HStack(spacing: 18) {
+            if let noah = UIImage(named: "NOAH LOGO") {
+                Image(uiImage: noah)
+                    .resizable()
+                    .aspectRatio(contentMode: .fit)
+                    .frame(maxHeight: 36)
+                    .shadow(color: .white.opacity(0.55), radius: 6, x: 0, y: 0)
+                    .shadow(color: .white.opacity(0.40), radius: 12, x: 0, y: 0)
+            }
+            if let upri = UIImage(named: "UPRI LOGO") {
+                Image(uiImage: upri)
+                    .resizable()
+                    .aspectRatio(contentMode: .fit)
+                    .frame(maxHeight: 36)
+            }
         }
         #endif
     }
