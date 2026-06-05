@@ -263,7 +263,10 @@ private struct ARSessionView: View {
 
                 guidelinesCard
                     .padding(.horizontal)
-                    .padding(.bottom, 24)
+                    // Reserve space at the bottom for the snapshot button so
+                    // the two don't overlap. 96pt covers the 56pt button +
+                    // its bottom padding.
+                    .padding(.bottom, 96)
             }
 
             // Top row: NOAH logo (left, translucent) + Exit (right).
