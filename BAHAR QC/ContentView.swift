@@ -316,8 +316,9 @@ private struct ARSessionView: View {
     }
 
     /// iOS-screenshot-style thumbnail of the most recent snapshot. Slides in
-    /// from the bottom-left after capture; tap to open a share sheet that
-    /// lets the user save to Photos or share elsewhere. Auto-dismisses.
+    /// from the bottom-left after capture. Tap → opens share sheet (save
+    /// already happened automatically). Swipe-left → dismiss the thumbnail
+    /// like the real iOS screenshot preview. Also auto-dismisses after 5s.
     @ViewBuilder
     private var snapshotThumbnail: some View {
         if thumbnailVisible, let img = snapshotImage {
@@ -335,14 +336,45 @@ private struct ARSessionView: View {
                     )
                     .shadow(color: .black.opacity(0.35), radius: 8, x: 0, y: 4)
                     .overlay(alignment: .bottomTrailing) {
+                        // Larger share glyph so the call-to-action reads clearly.
                         Image(systemName: "square.and.arrow.up.fill")
-                            .font(.caption2.weight(.bold))
+                            .font(.system(size: 16, weight: .bold))
                             .foregroundStyle(.white)
-                            .padding(5)
-                            .background(Color.black.opacity(0.55), in: Circle())
+                            .frame(width: 28, height: 28)
+                            .background(Color.black.opacity(0.65), in: Circle())
+                            .overlay(
+                                Circle().stroke(Color.white.opacity(0.30), lineWidth: 1)
+                            )
                             .padding(4)
                     }
             }
+            .offset(x: thumbnailDragOffset)
+            .opacity(1.0 - min(Double(abs(thumbnailDragOffset)) / 120.0, 0.9))
+            .gesture(
+                DragGesture()
+                    .onChanged { value in
+                        // Only allow swipe to the left (negative X). Resist right.
+                        thumbnailDragOffset = min(value.translation.width, 0)
+                    }
+                    .onEnded { value in
+                        if value.translation.width < -60 {
+                            // Swiped far enough — dismiss.
+                            withAnimation(.easeOut(duration: 0.25)) {
+                                thumbnailDragOffset = -200
+                                thumbnailVisible = false
+                            }
+                            // Reset for next snapshot.
+                            DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                                thumbnailDragOffset = 0
+                            }
+                        } else {
+                            // Snap back.
+                            withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
+                                thumbnailDragOffset = 0
+                            }
+                        }
+                    }
+            )
             .transition(.move(edge: .leading).combined(with: .opacity))
         }
     }
