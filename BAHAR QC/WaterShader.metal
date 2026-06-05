@@ -269,10 +269,11 @@ void waterSurface(realitykit::surface_parameters params)
     half3 tintedRefraction = mix(refraction, waterTint, half(0.42));
     half3 tintedReflection = mix(reflection, waterTint, half(0.32));
 
-    // Reflection bias matched to the reference — even at near-vertical view
-    // angles the water shows clear mirrored content (room/sky), and grazing
-    // angles go almost full mirror. Higher floor + steeper fresnel ramp.
-    half reflectStrength = half(saturate(fresnel * 1.10 + 0.32));
+    // Reflection contribution scaled back a touch — pure mirror dominance
+    // pulled in too many dark floor pixels and crushed the blue. Refraction
+    // (which carries the tinted camera feed) reads dominant at typical view
+    // angles now; grazing-angle mirror still kicks in.
+    half reflectStrength = half(saturate(fresnel * 0.95 + 0.15));
     half3 finalColor = mix(tintedRefraction, tintedReflection, reflectStrength);
 
     // Subtle sky sparkle.
