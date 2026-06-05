@@ -281,10 +281,6 @@ void waterSurface(realitykit::surface_parameters params)
     // Very faint trough darkening for depth cue.
     finalColor *= (half(1.0) - trough * half(0.05));
 
-    // Global value pull-down — small overall darken so highlights don't blow
-    // out and the water reads as a body of liquid rather than a bright glaze.
-    finalColor *= half(0.92);
-
     params.surface().set_base_color(finalColor);
     params.surface().set_normal(rippleNormal);
     params.surface().set_roughness(half(0.03));
