@@ -177,6 +177,9 @@ private struct LandingView: View {
                 .padding(.horizontal)
                 .padding(.bottom, 8)
         }
+        // Always render the landing page in light mode so the wordmark, logo
+        // glow, and copy stay on white regardless of the user's device theme.
+        .preferredColorScheme(.light)
     }
 }
 
