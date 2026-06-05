@@ -5,7 +5,8 @@
 //  Landing screen + AR session host. Mirrors the prototype's flow:
 //  1. Landing card explains the experience.
 //  2. Start AR → presents an ARKit horizontal-plane scene with a water plane
-//     that rises to the GPS-looked-up flood depth.
+//     that rises to the GPS-looked-up flood depth, with MMDA-themed HUD
+//     showing depth category, dynamic guidelines, and live GPS.
 //
 
 import CoreLocation
@@ -30,6 +31,48 @@ struct ContentView: View {
                     .padding()
             }
         #endif
+    }
+}
+
+// MARK: - MMDA theme tokens
+
+private enum MMDATheme {
+    // Hex-derived colours from the official MMDA gauge palette.
+    static let patv  = Color(red: 234/255, green: 179/255, blue:   8/255) // #EAB308
+    static let nplv  = Color(red: 249/255, green: 115/255, blue:  22/255) // #F97316
+    static let npatv = Color(red: 239/255, green:  68/255, blue:  68/255) // #EF4444
+    static let neutral = Color(red: 100/255, green: 116/255, blue: 139/255) // slate-500
+
+    static func color(for category: MMDAGauge.Category) -> Color {
+        switch category {
+        case .none:  return neutral
+        case .patv:  return patv
+        case .nplv:  return nplv
+        case .npatv: return npatv
+        }
+    }
+}
+
+/// A frosted-glass card style — slate-900 base, blur, hairline border.
+private struct GlassCard: ViewModifier {
+    var cornerRadius: CGFloat = 16
+    func body(content: Content) -> some View {
+        content
+            .background(
+                RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+                    .fill(Color(red: 15/255, green: 23/255, blue: 42/255).opacity(0.78)) // slate-900/78
+                    .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+                    .stroke(Color.white.opacity(0.10), lineWidth: 1)
+            )
+    }
+}
+
+private extension View {
+    func glassCard(cornerRadius: CGFloat = 16) -> some View {
+        modifier(GlassCard(cornerRadius: cornerRadius))
     }
 }
 
@@ -124,9 +167,6 @@ private struct ARSessionView: View {
             )
             .ignoresSafeArea()
 
-            // Underwater POV overlay — full-screen blue-tinted submerged view
-            // with caustics + light shaft + bubbles. Activates when the AR
-            // camera drops below the detected waterline.
             UnderwaterPOVOverlay(active: underwater)
 
             if let arError {
@@ -137,39 +177,50 @@ private struct ARSessionView: View {
                         .font(.caption2).foregroundStyle(.secondary)
                 }
                 .padding()
-                .background(.black.opacity(0.7), in: RoundedRectangle(cornerRadius: 12))
+                .glassCard(cornerRadius: 14)
                 .foregroundStyle(.white)
                 .padding()
             }
 
-            VStack {
+            // ===== HUD =====
+            VStack(spacing: 10) {
+                gpsCapsule
+                    .padding(.top, 56)
+
                 depthCard
-                    .padding(.top, 60)
-                gpsBar
-                    .padding(.top, 8)
+                    .padding(.horizontal)
+
                 Spacer()
+
                 if !groundFound {
                     Text("Point camera at the ground to detect floor")
-                        .font(.footnote)
+                        .font(.footnote.weight(.medium))
                         .padding(.horizontal, 14)
                         .padding(.vertical, 8)
-                        .background(.black.opacity(0.55), in: Capsule())
+                        .glassCard(cornerRadius: 20)
                         .foregroundStyle(.white)
-                        .padding(.bottom, 60)
                 }
-            }
-            .padding(.horizontal)
 
+                guidelinesCard
+                    .padding(.horizontal)
+                    .padding(.bottom, 24)
+            }
+
+            // Exit button overlaid in top-right.
             VStack {
                 HStack {
                     Spacer()
                     Button(action: onExit) {
-                        Text("✕ Exit")
-                            .font(.subheadline.bold())
-                            .padding(.horizontal, 14)
-                            .padding(.vertical, 8)
-                            .background(.black.opacity(0.6), in: Capsule())
-                            .foregroundStyle(.white)
+                        HStack(spacing: 4) {
+                            Image(systemName: "xmark")
+                                .font(.caption.bold())
+                            Text("Exit")
+                                .font(.subheadline.bold())
+                        }
+                        .padding(.horizontal, 14)
+                        .padding(.vertical, 8)
+                        .glassCard(cornerRadius: 20)
+                        .foregroundStyle(.white)
                     }
                 }
                 Spacer()
@@ -177,8 +228,6 @@ private struct ARSessionView: View {
             .padding()
         }
         .task {
-            // Start GPS immediately so the user sees it warming up while the
-            // 38 MB flood grid memory-maps in the background.
             location.start()
             await loadFloodData()
         }
@@ -189,48 +238,91 @@ private struct ARSessionView: View {
         .onDisappear { location.stop() }
     }
 
+    // MARK: - HUD components
+
+    /// Top-centre floating GPS pill. Glowing dot signals fix quality.
+    private var gpsCapsule: some View {
+        HStack(spacing: 8) {
+            ZStack {
+                Circle()
+                    .fill(gpsDotColor.opacity(0.35))
+                    .frame(width: 14, height: 14)
+                    .blur(radius: 2)
+                Circle()
+                    .fill(gpsDotColor)
+                    .frame(width: 8, height: 8)
+            }
+            Text(gpsText)
+                .font(.system(.footnote, design: .monospaced).weight(.medium))
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 8)
+        .glassCard(cornerRadius: 20)
+        .foregroundStyle(.white)
+    }
+
+    /// Main depth/category readout card. Active level is the largest element.
     private var depthCard: some View {
-        VStack(spacing: 8) {
+        VStack(spacing: 10) {
             if gauge.category == .none {
-                Text(gauge.category.fullName)
-                    .font(.caption.bold())
-                    .foregroundStyle(badgeColor)
+                Text("NO FLOOD AT THIS LOCATION")
+                    .font(.caption.weight(.bold))
+                    .tracking(1.2)
+                    .foregroundStyle(MMDATheme.color(for: .none))
             } else {
                 Text(gauge.category.abbreviation)
-                    .font(.system(size: 30, weight: .heavy, design: .rounded))
+                    .font(.system(size: 32, weight: .heavy, design: .rounded))
+                    .tracking(3)
+                    .foregroundStyle(.white)
+                    .padding(.horizontal, 20)
+                    .padding(.vertical, 6)
+                    .background(MMDATheme.color(for: gauge.category), in: Capsule())
+
+                Text(activeLevelLabel)
+                    .font(.system(size: 22, weight: .heavy, design: .rounded))
                     .tracking(2)
                     .foregroundStyle(.white)
-                    .padding(.horizontal, 18)
-                    .padding(.vertical, 6)
-                    .background(badgeColor, in: Capsule())
 
-                Text(gauge.description)
-                    .font(.headline)
-                    .multilineTextAlignment(.center)
+                Text(depthDisplay)
+                    .font(.system(size: 28, weight: .black, design: .rounded))
+                    .foregroundStyle(.white)
 
                 Text(gauge.category.fullName)
-                    .font(.caption2)
-                    .foregroundStyle(.secondary)
+                    .font(.caption2.weight(.semibold))
+                    .tracking(0.5)
+                    .foregroundStyle(.white.opacity(0.65))
                     .multilineTextAlignment(.center)
             }
         }
         .frame(maxWidth: .infinity)
         .padding(.vertical, 14)
         .padding(.horizontal, 12)
-        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 16))
+        .glassCard()
     }
 
-    private var gpsBar: some View {
-        HStack(spacing: 8) {
-            Image(systemName: "location.fill")
-            Text(gpsText)
-                .font(.footnote)
+    /// Dynamic safety guidance — text changes with the active flood category.
+    private var guidelinesCard: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(spacing: 6) {
+                Image(systemName: guidelinesIcon)
+                    .foregroundStyle(MMDATheme.color(for: gauge.category))
+                Text("Guidelines & Emergency Hotlines")
+                    .font(.footnote.weight(.bold))
+                    .tracking(0.5)
+                    .foregroundStyle(.white)
+            }
+            Text(guidelinesText)
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(.white)
+                .fixedSize(horizontal: false, vertical: true)
         }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 6)
-        .background(.black.opacity(0.55), in: Capsule())
-        .foregroundStyle(.white)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.horizontal, 14)
+        .padding(.vertical, 12)
+        .glassCard()
     }
+
+    // MARK: - HUD bindings
 
     private var gpsText: String {
         if let err = loadError { return err }
@@ -245,14 +337,61 @@ private struct ARSessionView: View {
                       loc.coordinate.latitude, loc.coordinate.longitude, loc.horizontalAccuracy)
     }
 
-    private var badgeColor: Color {
+    /// Signal-quality colour: green when accurate, yellow when slow, red when down.
+    private var gpsDotColor: Color {
+        if loadError != nil { return MMDATheme.npatv }
+        if !floodReady { return MMDATheme.patv }
+        switch location.authorizationStatus {
+        case .denied, .restricted: return MMDATheme.npatv
+        case .notDetermined: return MMDATheme.patv
+        default: break
+        }
+        guard let loc = location.lastLocation else { return MMDATheme.patv }
+        if loc.horizontalAccuracy > 50 { return MMDATheme.patv }
+        return Color.green
+    }
+
+    /// MMDA-style level label e.g. "GUTTER LEVEL", "KNEE LEVEL".
+    private var activeLevelLabel: String {
+        let inches = depth * 39.3700787
+        if inches < 10 { return "GUTTER LEVEL" }
+        if inches < 13 { return "HALF-KNEE LEVEL" }
+        if inches < 19 { return "HALF-TIRE LEVEL" }
+        if inches < 26 { return "KNEE LEVEL" }
+        if inches < 37 { return "TIRE LEVEL" }
+        if inches < 45 { return "WAIST LEVEL" }
+        return "CHEST LEVEL"
+    }
+
+    /// Depth in inches, rounded — matches the MMDA reference card markings.
+    private var depthDisplay: String {
+        let inches = Int(depth * 39.3700787 + 0.5)
+        return "\(inches)\""
+    }
+
+    private var guidelinesIcon: String {
         switch gauge.category {
-        case .none:  return .green
-        case .patv:  return .green
-        case .nplv:  return .orange
-        case .npatv: return .red
+        case .none:  return "checkmark.shield.fill"
+        case .patv:  return "exclamationmark.triangle.fill"
+        case .nplv:  return "exclamationmark.octagon.fill"
+        case .npatv: return "xmark.octagon.fill"
         }
     }
+
+    private var guidelinesText: String {
+        switch gauge.category {
+        case .none:
+            return "Safe — no flooding expected at this location for the 100-year return period."
+        case .patv:
+            return "Proceed slowly. Keep distance from trucks and large vehicles."
+        case .nplv:
+            return "Warning: light vehicles must detour immediately. Avoid wading."
+        case .npatv:
+            return "CRITICAL: do not attempt driving or wading. Seek higher ground."
+        }
+    }
+
+    // MARK: - Data
 
     private func loadFloodData() async {
         do {
