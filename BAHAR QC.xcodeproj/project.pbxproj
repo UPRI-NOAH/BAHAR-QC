@@ -149,22 +149,9 @@
 		09E8BD372FBEF62400179E24 /* Catchment_Guide.jpg */ = {isa = PBXFileReference; lastKnownFileType = image.jpeg; path = Catchment_Guide.jpg; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
-/* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
-		09AB72C52FD2797700AA7219 /* Exceptions for "BAHAR QC" folder in "BAHAR QC" target */ = {
-			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
-			membershipExceptions = (
-				"BAHAR-QC-Info.plist",
-			);
-			target = 09E8BC7C2FBEF51A00179E24 /* BAHAR QC */;
-		};
-/* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
-
 /* Begin PBXFileSystemSynchronizedRootGroup section */
 		09E8BC7F2FBEF51A00179E24 /* BAHAR QC */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
-			exceptions = (
-				09AB72C52FD2797700AA7219 /* Exceptions for "BAHAR QC" folder in "BAHAR QC" target */,
-			);
 			path = "BAHAR QC";
 			sourceTree = "<group>";
 		};

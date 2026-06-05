@@ -558,9 +558,9 @@ private struct ARSessionView: View {
     // MARK: - AR Snapshot
 
     /// Captures the live AR frame + HUD overlay, plays a camera-flash effect,
-    /// and slides in an iOS-screenshot-style thumbnail at the bottom-left.
-    /// Tapping the thumbnail opens the share sheet (which includes Save Image).
-    /// Thumbnail auto-dismisses after a few seconds.
+    /// saves directly to the Photos library, and slides in an iOS-screenshot-
+    /// style thumbnail at the bottom-left. Tap the thumbnail to share further
+    /// (AirDrop, Messages, etc.); it auto-dismisses after a few seconds.
     private func takeSnapshot() {
         // Capture FIRST so the flash overlay isn't included in the image.
         let image = captureKeyWindow()
@@ -576,6 +576,11 @@ private struct ARSessionView: View {
         generator.impactOccurred()
 
         guard let image else { return }
+
+        // Save straight to Photos. Permission string lives in the target's
+        // INFOPLIST_KEY_NSPhotoLibraryAddUsageDescription.
+        UIImageWriteToSavedPhotosAlbum(image, nil, nil, nil)
+
         snapshotImage = image
         withAnimation(.spring(response: 0.4, dampingFraction: 0.75)) {
             thumbnailVisible = true
