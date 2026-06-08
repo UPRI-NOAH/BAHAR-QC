@@ -132,4 +132,4 @@ BAHAR QC/
 
 - **UP NOAH** — flood depth model and Mapbox tileset.
 - **UPRI** — project owner; institutional collaborator.
-- iOS AR implementation, water shader, and HUD by the BAHAR QC team.
+- iOS AR implementation, water shader, and HUD by the RCW and WebGIS team.
