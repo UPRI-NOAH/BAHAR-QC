@@ -12,9 +12,14 @@ export async function handler(event) {
     return { statusCode: 500, body: 'MAPBOX_TOKEN not configured' };
   }
 
+  // Tight radius + single result so we report the polygon directly under
+  // the query point, not the worst of any neighbour within 25 m. The old
+  // (radius=25, limit=5) would bleed nearby low-flood polygons into "safe"
+  // locations like UP Resilience Institute and trigger a false gutter-level
+  // reading. 5 m absorbs typical GPS jitter without crossing tile edges.
   const url =
     `https://api.mapbox.com/v4/${TILESET_ID}/tilequery/${lon},${lat}.json` +
-    `?radius=25&limit=5&access_token=${token}`;
+    `?radius=5&limit=1&access_token=${token}`;
 
   try {
     const res  = await fetch(url);
