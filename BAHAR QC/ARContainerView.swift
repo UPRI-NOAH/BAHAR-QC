@@ -148,12 +148,15 @@ struct ARContainerView: UIViewRepresentable {
         private func applyDepth() {
             guard let entity = waterEntity else { return }
             let depthF = Float(currentDepth)
+            // Mirror the MMDA noise floor (8 inches = 0.2032 m): hide water
+            // when the gauge reads "LITTLE TO NONE" so the AR matches the HUD.
+            entity.isEnabled = currentDepth > 0.2032
             // Visual height is heavily compressed — Mapbox's PATV "gutter
             // deep" can read up to 0.25 m, but a real gutter is only a few
             // centimetres. Quarter the displayed height so the AR water film
             // surrounds objects at ankle level. The accurate depth value
             // still drives the gauge text, colour, and wave amplitude.
-            let visualHeight = max(depthF * 0.25, 0.001)
+            let visualHeight = depthF * 0.25
             entity.transform.translation = [0, visualHeight, 0]
 
             // Push the depth into the water material's custom parameter so

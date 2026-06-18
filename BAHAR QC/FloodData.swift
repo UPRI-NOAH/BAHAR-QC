@@ -4,7 +4,7 @@
 //
 //  Mapbox Tilequery-backed flood depth lookup. Mirrors the JS version
 //  (js/flood-data-ios.js): hits the Netlify-proxied tilequery endpoint for
-//  the `upri-noah.mm_fh_100yr_tls` tileset and caches results on a ~55 m grid
+//  the `upri-noah.mm_fh_100yr_tls` tileset and caches results on a ~5 m grid
 //  so GPS pings don't hammer the API.
 //
 //  depth(latitude:longitude:) →
@@ -83,7 +83,7 @@ actor FloodData {
         static let east  = 121.20
     }
 
-    /// In-memory cache keyed by quantized lat/lon (~55 m grid).
+    /// In-memory cache keyed by quantized lat/lon (~5 m grid).
     private var cache: [String: Double] = [:]
 
     var isReady: Bool { true }
@@ -136,11 +136,11 @@ actor FloodData {
         MMDAGauge.from(depthMeters: depth)
     }
 
-    /// Quantize to ~55 m (0.0005°) so multiple GPS pings near the same spot
-    /// share one cached answer. Identical key shape to the JS cache.
+    /// Quantize to ~5 m (0.00005°) so GPS pings within the same Mapbox tile
+    /// share one cached answer without bleeding across polygon boundaries.
     private func cacheKey(lat: Double, lon: Double) -> String {
-        let qLat = Int((lat * 2000).rounded())
-        let qLon = Int((lon * 2000).rounded())
+        let qLat = Int((lat * 20000).rounded())
+        let qLon = Int((lon * 20000).rounded())
         return "\(qLat),\(qLon)"
     }
 }
