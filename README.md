@@ -43,6 +43,24 @@ feature for the depth value (metres).
 Coverage is bounded to Metro Manila (N 14.82, S 14.35, W 120.90, E 121.20).
 Outside this bbox the app returns "no flood".
 
+### Accuracy / spillover handling
+
+Tilequery returns every polygon within a search radius of the query point,
+not just the polygon directly under it. Without tight parameters the proxy
+would bleed flooded polygons up to 25 m away into a safe location (e.g. UP
+Resilience Institute reading as gutter level even though its tile is
+classified "little to none" on NOAH Studio).
+
+Two layers of cleanup keep the AR reading consistent with the NOAH map:
+
+1. **Netlify proxy** (`netlify/functions/tilequery.js`) calls Mapbox with
+   `radius=5&limit=1`. Five metres absorbs typical GPS jitter without
+   crossing tile edges, and a single result means we report the polygon
+   directly under the point.
+2. **iOS noise floor** (`MMDAGauge.from`) treats depths below **2 cm**
+   (≈0.8 in) as `none`. Anything that small isn't actionable and matches
+   NOAH's "little to none" classification.
+
 ## What you see in the app
 
 - **Landing screen** — NOAH + UPRI partner logos, the **BahAR** wordmark,
