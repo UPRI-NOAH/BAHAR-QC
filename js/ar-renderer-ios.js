@@ -281,7 +281,7 @@ export class ARRenderer {
     this.floodDepth  = depth      ?? 0;
     this.hazardLevel = hazardLevel ?? 'none';
     if (this._waterMat) {
-      this._waterMat.uniforms.uOpacity.value = this.floodDepth > 0 ? 1.0 : 0.0;
+      this._waterMat.uniforms.uOpacity.value = this.floodDepth > 0.2032 ? 1.0 : 0.0;
       this._waterMat.uniforms.uDepth.value   = this.floodDepth;
     }
     this._updateGaugeTicks();
@@ -346,7 +346,7 @@ export class ARRenderer {
       if (typeof this.onGroundFound === 'function') this.onGroundFound(groundY);
     }
 
-    if (this.floodDepth > 0) {
+    if (this.floodDepth > 0.2032) {
       // Clamp water plane so it never rises above camera — once depth ≥ 1.7 m
       // the body.submerged CSS overlay handles the underwater visual.
       const waterY     = Math.min(groundY + this.floodDepth, -0.05);
@@ -436,7 +436,7 @@ export class ARRenderer {
     const fx = camPos.x + camDir.x * 2.5;
     const fz = camPos.z + camDir.z * 2.5;
 
-    if (this.floodDepth > 0) {
+    if (this.floodDepth > 0.2032) {
       const waterY     = Math.min(groundY + this.floodDepth, camPos.y - 0.05);
       const planeScale = Math.max(0.5, Math.min(this.floodDepth * 2.0 + 0.5, 3.0));
       this._waterPlane.scale.setScalar(planeScale);

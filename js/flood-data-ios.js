@@ -28,9 +28,9 @@ export class FloodData {
     console.log('[FloodData] Mapbox Tilequery mode — data fetched on demand');
   }
 
-  // Round to ~55 m grid (0.0005 ° ≈ 55 m) to reuse cached results
+  // Round to ~5 m grid (0.00005 ° ≈ 5 m) to reuse cached results
   _cacheKey(lat, lon) {
-    return `${(lat * 2000).toFixed(0)},${(lon * 2000).toFixed(0)}`;
+    return `${(lat * 20000).toFixed(0)},${(lon * 20000).toFixed(0)}`;
   }
 
   async getDepth(lat, lon) {
