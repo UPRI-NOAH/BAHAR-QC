@@ -148,6 +148,13 @@ struct ARContainerView: UIViewRepresentable {
         private func applyDepth() {
             guard let entity = waterEntity else { return }
             let depthF = Float(currentDepth)
+
+            // No flood → hide the water plane entirely. Parent passes 0 when
+            // the MMDA gauge classifies the location as none, so we don't
+            // render a near-zero translucent film over un-flooded locations.
+            entity.isEnabled = depthF > 0
+            guard depthF > 0 else { return }
+
             // Visual height is heavily compressed — Mapbox's PATV "gutter
             // deep" can read up to 0.25 m, but a real gutter is only a few
             // centimetres. Quarter the displayed height so the AR water film
