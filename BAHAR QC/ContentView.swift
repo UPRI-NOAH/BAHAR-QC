@@ -443,14 +443,21 @@ private struct ARSessionView: View {
         VStack(spacing: 4) {
             if gauge.category == .none {
                 HStack(spacing: 6) {
-                    Text("✅")
+                    Text("💧")
                         .font(.system(size: 24))
-                    Text("NO FLOOD")
+                    Text("LITTLE TO NONE")
                         .font(.system(size: 22, weight: .heavy, design: .rounded))
-                        .tracking(2)
+                        .tracking(1.5)
                         .foregroundStyle(.white)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.7)
                 }
-                Text("Safe at this location")
+                // Same live debug line as the flooded branch so the user can
+                // still see the raw Tilequery value updating as they move.
+                Text(depthDisplay)
+                    .font(.system(.caption, design: .monospaced).weight(.semibold))
+                    .foregroundStyle(.white.opacity(0.85))
+                Text("Below NOAH flood threshold")
                     .font(.caption2.weight(.medium))
                     .foregroundStyle(.white.opacity(0.70))
             } else {
