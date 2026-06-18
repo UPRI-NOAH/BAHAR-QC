@@ -48,15 +48,14 @@ nonisolated struct MMDAGauge: Equatable, Sendable {
     /// Maps a depth in metres to its MMDA gauge classification. Thresholds are
     /// the inch markers from the official system (8, 10, 13, 19, 26, 37, 45).
     ///
-    /// `noiseFloor` (10 cm ≈ 4 in) matches NOAH Studio's "Little to None"
-    /// classification. The raw tileset reports a fractional `Var` value
-    /// (e.g. 0.07 m at UP Resilience Institute) even at locations NOAH
-    /// Studio displays as un-flooded, because the hazard map's UI tiers
-    /// start at ~0.10 m (Low) and treat anything below as no-hazard.
-    /// We mirror that threshold so the AR reading agrees with what users
-    /// see on the NOAH map.
+    /// `noiseFloor` = MMDA's official gutter-deep threshold of 8 inches
+    /// (0.2032 m). Below 8" MMDA does not assign a vehicle-passability
+    /// category, so neither do we — the card reads "LITTLE TO NONE",
+    /// matching both NOAH Studio's "Little to None" wording and the MMDA
+    /// gauge's lowest tier boundary. Above 8" the official gauge kicks in:
+    /// 8-10" gutter, 10-13" half-knee, etc.
     static func from(depthMeters: Double) -> MMDAGauge {
-        let noiseFloor = 0.10
+        let noiseFloor = 0.2032 // 8 inches = MMDA's lowest classified depth
         guard depthMeters > noiseFloor else { return .none }
         let inches = depthMeters * 39.3700787
 
