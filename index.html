@@ -10,34 +10,34 @@
 
   <!-- ── Landing Screen ─────────────────────────────────────────────── -->
   <div id="screen-landing">
-    <img src="NOAH LOGO.png" alt="Project NOAH" id="noah-logo-landing">
+    <div class="logo-row">
+      <img src="NOAH LOGO.png" alt="Project NOAH" class="partner-logo">
+      <img src="UPRI LOGO.png" alt="UP Resilience Institute" class="partner-logo">
+    </div>
+
     <div class="logo-wrap">
-      <div class="logo-text">BAHAR</div>
+      <div class="logo-text">BahAR</div>
       <div class="logo-sub">Baha Augmented Reality</div>
     </div>
 
     <div class="card">
-      <div class="card-title">Metro Manila · 100-Year Flood</div>
+      <div class="card-title">Metro Manila's First AR Flood App</div>
       <p class="card-desc">
-        Point your camera at the ground to see accurate flood depth across
-        Metro Manila, from Project NOAH's 100-year return period model.
+        Powered by UP NOAH's 100-year flood return model. Point your camera
+        at the ground to see the expected flood depth at your current location.
       </p>
     </div>
 
-    <div id="status-msg" class="status">Checking WebXR support…</div>
+    <div id="status-msg" class="status">Checking device support…</div>
 
     <button id="btn-start" class="btn-primary" disabled>
       Start AR
     </button>
 
-    <div class="prototype-notice">
-      <span class="prototype-tag">Prototype Notice</span>
-      BAHAR is currently a prototype platform. While integrated data sources may be accurate and reliable, some map locations, visualizations, and system functions may be affected by platform, GPS, or technical limitations during development.
-    </div>
-
     <div class="disclaimer">
-      Use iOS Safari or Android Chrome.<br>
-      Allow camera &amp; location access when prompted.
+      Prototype — designed for outdoor, ground-level use. Geolocation
+      accuracy may vary depending on GPS signal and device.<br>
+      <span class="disclaimer-sub">Requires iOS 14.5+ / Safari. Allow camera &amp; location access when prompted.</span>
     </div>
   </div>
 
