@@ -17,17 +17,18 @@ const renderer = new ARRenderer(
 const elStatus      = document.getElementById('status-msg');
 const elBtnStart    = document.getElementById('btn-start');
 const elBtnExit     = document.getElementById('btn-exit');
-const elDepthVal    = document.getElementById('depth-value');
-const elDepthBadge  = document.getElementById('depth-badge');
+const elGpsDot      = document.getElementById('gps-dot');
 const elGpsText     = document.getElementById('gps-text');
-const elElevBar     = document.getElementById('elev-bar');
-const elElevBarVal  = document.getElementById('elev-bar-value');
+const elDepthEmoji  = document.getElementById('depth-emoji');
+const elDepthLabel  = document.getElementById('depth-label');
+const elDepthVal    = document.getElementById('depth-value');
+const elDepthSub    = document.getElementById('depth-sub');
+const elDepthCat    = document.getElementById('depth-category');
 const elScanHint    = document.getElementById('scan-hint');
 const elLanding     = document.getElementById('screen-landing');
 const elOverlay     = document.getElementById('ar-overlay');
 const elCanvas      = document.getElementById('ar-canvas');
 const elFloodFilter = document.getElementById('flood-filter');
-const elWaterLevel  = document.getElementById('water-level-label');
 const elDisclaimer  = document.querySelector('.disclaimer');
 
 let gpsWatchId   = null;
@@ -137,7 +138,6 @@ function stopAR() {
   document.body.classList.remove('submerged');
   elFloodFilter.classList.remove('active');
   elFloodFilter.style.height = '0%';
-  elWaterLevel.classList.add('hidden');
   elBtnStart.disabled = false;
   elScanHint.classList.remove('hidden');
 }
@@ -166,41 +166,48 @@ function stopGPS() {
 async function onPosition(pos) {
   const { latitude: lat, longitude: lon, accuracy, altitude, altitudeAccuracy } = pos.coords;
 
-  elGpsText.textContent =
-    `${lat.toFixed(5)}°N  ${lon.toFixed(5)}°E  (±${Math.round(accuracy)}m)`;
+  elGpsText.textContent = `${lat.toFixed(5)}, ${lon.toFixed(5)}  ±${Math.round(accuracy)}m`;
+  elGpsDot.className = accuracy <= 50 ? 'ok' : accuracy <= 100 ? '' : 'err';
 
   if (altitude !== null && altitude !== undefined) {
-    elElevBarVal.textContent = altitude.toFixed(1);
-    elElevBar.classList.remove('hidden');
     renderer.setElevation(altitude, altitudeAccuracy);
-  } else {
-    elElevBar.classList.add('hidden');
   }
 
   const modelDepth = await flood.getDepth(lat, lon);
 
   if (modelDepth === null) {
-    elDepthVal.textContent   = '--';
-    elDepthBadge.textContent = 'OUTSIDE COVERAGE AREA';
-    elDepthBadge.className   = 'badge-none';
+    elDepthEmoji.textContent = '📍';
+    elDepthLabel.textContent = 'OUTSIDE COVERAGE';
+    elDepthVal.textContent   = '';
+    elDepthSub.textContent   = 'No flood data for this location';
+    elDepthCat.className     = 'hidden';
     renderer.setFlood(0, 'none');
     document.body.classList.remove('submerged');
     elFloodFilter.classList.remove('active');
     elFloodFilter.style.height = '0%';
-    elWaterLevel.classList.add('hidden');
     return;
   }
 
-  // Depths below 0.10 m are below NOAH's minimum low-hazard threshold and
-  // do not appear on NOAH's visual flood maps — treat as no flood.
   const depth = modelDepth >= 0.10 ? modelDepth : 0;
-
   currentDepth  = depth;
   currentHazard = flood.hazardLevel(depth);
 
-  elDepthVal.textContent   = depth > 0 ? depth.toFixed(2) : '0.00';
-  elDepthBadge.textContent = flood.hazardLabel(depth);
-  elDepthBadge.className   = `badge-${currentHazard}`;
+  const MMDA_THRESHOLD = 0.2032;
+
+  if (depth < MMDA_THRESHOLD) {
+    elDepthEmoji.textContent = '💧';
+    elDepthLabel.textContent = 'LITTLE TO NONE';
+    elDepthVal.textContent   = depthDisplay(depth);
+    elDepthSub.textContent   = 'Below NOAH flood threshold';
+    elDepthCat.className     = 'hidden';
+  } else {
+    elDepthEmoji.textContent = humanScaleEmoji(depth);
+    elDepthLabel.textContent = humanScaleLabel(depth);
+    elDepthVal.textContent   = depthDisplay(depth);
+    elDepthSub.textContent   = '';
+    elDepthCat.textContent   = mmdaCategory(depth);
+    elDepthCat.className     = mmdaClass(depth);
+  }
 
   renderer.setFlood(depth, currentHazard);
 
@@ -213,14 +220,12 @@ async function onPosition(pos) {
     elFloodFilter.style.height = '0%';
   }
 
-  elWaterLevel.textContent = waterLevelLabel(depth);
-  elWaterLevel.classList.toggle('hidden', depth <= 0);
-
   document.body.classList.toggle('submerged', depth >= 1.7);
 }
 
 function onGPSError(err) {
   elGpsText.textContent = `GPS error: ${err.message}`;
+  elGpsDot.className = 'err';
 }
 
 /* ── Helpers ──────────────────────────────────────────────────────────────── */
@@ -229,13 +234,43 @@ function setStatus(msg, cls = '') {
   elStatus.className   = `status ${cls}`;
 }
 
-// Depth thresholds based on average Filipino height 5'6" (1.68 m)
-function waterLevelLabel(depth) {
-  if (depth <= 0)   return '';
-  if (depth < 0.5)  return '🦶 Ankle deep';
-  if (depth < 1.5)  return '🦵 Knee deep';
-  if (depth < 1.7)  return '💪 Shoulder deep';
-  return '🌊 Above head — danger!';
+function humanScaleLabel(depth) {
+  const i = depth * 39.3700787;
+  if (i < 10) return 'GUTTER LEVEL';
+  if (i < 13) return 'HALF-KNEE LEVEL';
+  if (i < 19) return 'CALF LEVEL';
+  if (i < 26) return 'KNEE LEVEL';
+  if (i < 37) return 'THIGH LEVEL';
+  if (i < 45) return 'WAIST LEVEL';
+  return 'CHEST LEVEL';
+}
+
+function humanScaleEmoji(depth) {
+  const i = depth * 39.3700787;
+  if (i < 10) return '🥾';
+  if (i < 26) return '🦵';
+  if (i < 37) return '🚴';
+  if (i < 45) return '🧍';
+  return '👤';
+}
+
+function depthDisplay(depth) {
+  const inches = Math.round(depth * 39.3700787);
+  return `${inches}" / ~${depth.toFixed(2)} m / ${depth.toFixed(4)}`;
+}
+
+function mmdaCategory(depth) {
+  const i = depth * 39.3700787;
+  if (i < 13) return 'PATV';
+  if (i < 26) return 'NPLV';
+  return 'NPATV';
+}
+
+function mmdaClass(depth) {
+  const i = depth * 39.3700787;
+  if (i < 13) return 'patv';
+  if (i < 26) return 'nplv';
+  return 'npatv';
 }
 
 /* ── Run ───────────────────────────────────────────────────────────────────── */

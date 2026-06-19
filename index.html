@@ -44,34 +44,29 @@
   <!-- ── AR DOM Overlay (shown during AR session) ───────────────────── -->
   <div id="ar-overlay">
 
-    <div id="depth-card">
-      <div id="depth-badge" class="badge-none">NO FLOOD</div>
-      <div id="depth-row">
-        <span id="depth-value">--</span>
-        <span id="depth-unit">m</span>
+    <div id="ar-top">
+      <div id="ar-top-row">
+        <img src="NOAH LOGO.png" alt="Project NOAH" id="noah-logo-ar">
+        <button id="btn-exit" class="btn-exit">✕ Exit</button>
       </div>
-      <div id="depth-label">flood depth at your location</div>
-      <div id="water-level-label" class="hidden"></div>
-    </div>
 
-    <div id="gps-bar">
-      <span id="gps-icon">📡</span>
-      <span id="gps-text">Waiting for GPS…</span>
-      <span id="elev-bar" class="hidden">
-        <span class="elev-sep">|</span>
-        <span id="elev-bar-icon">▲</span>
-        <span id="elev-bar-value">--</span>
-        <span class="elev-bar-unit">m</span>
-      </span>
+      <div id="gps-bar">
+        <span id="gps-dot"></span>
+        <span id="gps-text">Waiting for GPS…</span>
+      </div>
+
+      <div id="depth-card">
+        <div id="depth-primary-row">
+          <span id="depth-emoji">💧</span>
+          <span id="depth-label">LITTLE TO NONE</span>
+        </div>
+        <div id="depth-value">--</div>
+        <div id="depth-sub">Below NOAH flood threshold</div>
+        <div id="depth-category" class="hidden"></div>
+      </div>
     </div>
-    <div id="ar-fineprint">Readings are optimized for outdoor ground-level areas and may be less accurate indoors or on upper floors.</div>
 
     <div id="scan-hint" class="hint">Point camera at the ground to detect floor</div>
-
-    <button id="btn-exit" class="btn-exit">✕ Exit</button>
-
-    <!-- NOAH watermark during AR -->
-    <img src="NOAH LOGO.png" alt="Project NOAH" id="noah-logo-ar">
 
   </div>
 
