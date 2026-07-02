@@ -158,7 +158,7 @@ private struct LandingView: View {
             VStack(alignment: .leading, spacing: 8) {
                 Text("Metro Manila's First AR Flood App")
                     .font(.headline)
-                Text("Powered by UP NOAH's 100-year flood return model. Point your camera at the ground to see the expected flood depth at your current location.")
+                Text("Powered by UP NOAH's 100-year flood return model. Point your camera at a person or the ground — flood water rises to the expected depth at your current location.")
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
             }
@@ -253,7 +253,7 @@ private struct ARSessionView: View {
                 Spacer()
 
                 if !groundFound {
-                    Text("Point camera at the ground to detect floor")
+                    Text("Point camera at yourself, a person, or the ground")
                         .font(.footnote.weight(.medium))
                         .padding(.horizontal, 14)
                         .padding(.vertical, 8)

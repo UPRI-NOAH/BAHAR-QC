@@ -121,11 +121,18 @@ struct ARContainerView: UIViewRepresentable {
             guard let arView else { return }
             let config = ARWorldTrackingConfiguration()
             config.planeDetection = [.horizontal]
-
-            // No person segmentation — we want the water to render OVER the
-            // person, so they appear submerged through the translucent water
-            // rather than being masked out in front of it.
             config.environmentTexturing = .automatic
+
+            // Enable depth-based person segmentation so ARKit composites the
+            // person with the water plane correctly: body parts above the
+            // waterline appear in front of the water, parts below appear
+            // behind it — giving the "standing in flood" body-filter effect.
+            // Falls back to mask-only segmentation on older A11 devices.
+            if ARWorldTrackingConfiguration.supportsFrameSemantics(.personSegmentationWithDepth) {
+                config.frameSemantics = [.personSegmentationWithDepth]
+            } else if ARWorldTrackingConfiguration.supportsFrameSemantics(.personSegmentation) {
+                config.frameSemantics = [.personSegmentation]
+            }
 
             arView.session.run(config, options: [.resetTracking, .removeExistingAnchors])
         }
@@ -151,12 +158,11 @@ struct ARContainerView: UIViewRepresentable {
             // Mirror the MMDA noise floor (8 inches = 0.2032 m): hide water
             // when the gauge reads "LITTLE TO NONE" so the AR matches the HUD.
             entity.isEnabled = currentDepth > 0.2032
-            // Visual height is heavily compressed — Mapbox's PATV "gutter
-            // deep" can read up to 0.25 m, but a real gutter is only a few
-            // centimetres. Quarter the displayed height so the AR water film
-            // surrounds objects at ankle level. The accurate depth value
-            // still drives the gauge text, colour, and wave amplitude.
-            let visualHeight = depthF * 0.25
+            // Use full flood depth so the water surface sits at the actual
+            // flood level on the body — knee-deep data shows water at knee
+            // height, waist-deep at waist height. Person segmentation handles
+            // the occlusion boundary at the waterline.
+            let visualHeight = depthF
             entity.transform.translation = [0, visualHeight, 0]
 
             // Push the depth into the water material's custom parameter so
