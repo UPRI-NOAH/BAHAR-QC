@@ -197,6 +197,12 @@ private struct LandingView: View {
 private struct ARSessionView: View {
     let onExit: () -> Void
 
+    // DEBUG: set to a depth in meters to bypass the NOAH lookup and force a
+    // flood level anywhere (for testing outside flood-prone areas).
+    // Set back to nil for real GPS-based lookups before release.
+    //   Knee ~0.5, Waist ~0.95, Chest ~1.35
+    private let debugDepthOverride: Double? = 0.95
+
     @StateObject private var location = LocationManager()
     @State private var flood = FloodData()
     @State private var floodReady = false
@@ -206,6 +212,7 @@ private struct ARSessionView: View {
     @State private var groundFound = false
     @State private var arError: String?
     @State private var underwater: Bool = false
+    @State private var mapExpanded = false
 
     // Snapshot UI state
     @State private var flashOpacity: Double = 0
@@ -286,6 +293,7 @@ private struct ARSessionView: View {
                 HStack(alignment: .bottom) {
                     VStack(alignment: .leading, spacing: 12) {
                         snapshotThumbnail
+                        miniMap
                         guidelinesCard
                     }
                     Spacer()
@@ -300,6 +308,11 @@ private struct ARSessionView: View {
                 }
             }
             .padding()
+
+            // Expanded mini-map overlay.
+            if mapExpanded {
+                expandedMap
+            }
 
             // Flash overlay — fades out after each capture.
             Color.white
@@ -547,6 +560,63 @@ private struct ARSessionView: View {
         }
     }
 
+    // MARK: - Mini map
+
+    /// Small NOAH-basemap map pinned under the Exit button. Follows the GPS
+    /// fix; tap to expand into the full-screen pannable map.
+    private var miniMap: some View {
+        Button {
+            withAnimation(.spring(duration: 0.3)) { mapExpanded = true }
+        } label: {
+            NOAHMapView(coordinate: location.lastLocation?.coordinate,
+                        interactive: false)
+                .frame(width: 110, height: 110)
+                .clipShape(RoundedRectangle(cornerRadius: 14))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 14)
+                        .strokeBorder(.white.opacity(0.6), lineWidth: 1.5)
+                )
+                .shadow(color: .black.opacity(0.35), radius: 6, y: 2)
+                .allowsHitTesting(false) // gestures belong to the button
+        }
+        .accessibilityLabel("Expand flood map")
+    }
+
+    /// Full-screen pannable/zoomable map with the flood-depth overlay.
+    private var expandedMap: some View {
+        ZStack(alignment: .topTrailing) {
+            Color.black.opacity(0.5)
+                .ignoresSafeArea()
+                .onTapGesture {
+                    withAnimation(.spring(duration: 0.3)) { mapExpanded = false }
+                }
+
+            NOAHMapView(coordinate: location.lastLocation?.coordinate,
+                        interactive: true)
+                .clipShape(RoundedRectangle(cornerRadius: 20))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 20)
+                        .strokeBorder(.white.opacity(0.4), lineWidth: 1)
+                )
+                .padding(.horizontal, 16)
+                .padding(.vertical, 60)
+
+            Button {
+                withAnimation(.spring(duration: 0.3)) { mapExpanded = false }
+            } label: {
+                Image(systemName: "xmark")
+                    .font(.headline.bold())
+                    .foregroundStyle(.white)
+                    .frame(width: 40, height: 40)
+                    .glassCard(cornerRadius: 20)
+            }
+            .padding(.trailing, 28)
+            .padding(.top, 72)
+            .accessibilityLabel("Close flood map")
+        }
+        .transition(.opacity.combined(with: .scale(scale: 0.94)))
+    }
+
     // MARK: - HUD bindings
 
     private var gpsText: String {
@@ -643,7 +713,12 @@ private struct ARSessionView: View {
     }
 
     private func refreshDepth(latitude: Double, longitude: Double) async {
-        let d = await flood.depth(latitude: latitude, longitude: longitude) ?? 0
+        let d: Double
+        if let override = debugDepthOverride {
+            d = override
+        } else {
+            d = await flood.depth(latitude: latitude, longitude: longitude) ?? 0
+        }
         let g = await flood.gauge(for: d)
         await MainActor.run {
             depth = d
