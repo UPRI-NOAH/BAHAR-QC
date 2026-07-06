@@ -96,6 +96,7 @@ struct ARContainerView: UIViewRepresentable {
 
         private var lastUnderwater: Bool = false
         private var cameraFrameTick: Int = 0
+        private var raycastTick: Int = 0
         // Lowest camera Y observed during this AR session. Used as a robust
         // floor estimate when ARKit fails to detect the real floor plane —
         // the camera-min minus a small offset is reliably at-or-near floor
@@ -123,17 +124,11 @@ struct ARContainerView: UIViewRepresentable {
             config.planeDetection = [.horizontal]
             config.environmentTexturing = .automatic
 
-            // Enable depth-based person segmentation so ARKit composites the
-            // person with the water plane correctly: body parts above the
-            // waterline appear in front of the water, parts below appear
-            // behind it — giving the "standing in flood" body-filter effect.
-            // Falls back to mask-only segmentation on older A11 devices.
-            if ARWorldTrackingConfiguration.supportsFrameSemantics(.personSegmentationWithDepth) {
-                config.frameSemantics = [.personSegmentationWithDepth]
-            } else if ARWorldTrackingConfiguration.supportsFrameSemantics(.personSegmentation) {
-                config.frameSemantics = [.personSegmentation]
-            }
-
+            // No person segmentation — the semi-transparent water plane renders
+            // over the person naturally, showing them through the water up to
+            // the waterline (like the real flood effect in the reference peg).
+            // Person segmentation caused the opposite effect: it cut the person
+            // out of the water instead of showing them submerged inside it.
             arView.session.run(config, options: [.resetTracking, .removeExistingAnchors])
         }
 
@@ -208,6 +203,46 @@ struct ARContainerView: UIViewRepresentable {
                     groundY = cameraEstFloor
                     waterAnchor?.transform.translation = [0, cameraEstFloor, 0]
                     groundIsEstimate = true
+                }
+            }
+
+            // While the ground is still a camera-height guess, refine it with
+            // ARKit raycasts. Estimated-plane raycasts return a real measured
+            // surface height (fast, works before full plane anchors form) —
+            // far more accurate than the fixed 1.4 m hand-height assumption,
+            // which put the water surface ~15 cm too high whenever the phone
+            // was held above 1.4 m.
+            //
+            // Rays are cast from several points down the lower half of the
+            // screen, not just the centre — when the user frames a person
+            // full-body, the centre lands on the person but the bottom of the
+            // frame still sees ground. Adopting the LOWEST hit also guards
+            // against locking onto benches / tables / raised surfaces.
+            raycastTick &+= 1
+            if raycastTick % 10 == 0, groundIsEstimate, let view = arView {
+                let w = view.bounds.width
+                let h = view.bounds.height
+                let probePoints = [
+                    CGPoint(x: w * 0.5, y: h * 0.50),
+                    CGPoint(x: w * 0.5, y: h * 0.70),
+                    CGPoint(x: w * 0.5, y: h * 0.88),
+                    CGPoint(x: w * 0.25, y: h * 0.80),
+                    CGPoint(x: w * 0.75, y: h * 0.80),
+                ]
+                var lowestHitY: Float?
+                for point in probePoints {
+                    if let hit = view.raycast(from: point,
+                                              allowing: .estimatedPlane,
+                                              alignment: .horizontal).first {
+                        let hitY = hit.worldTransform.columns.3.y
+                        lowestHitY = min(lowestHitY ?? hitY, hitY)
+                    }
+                }
+                if let hitY = lowestHitY,
+                   let current = groundY,
+                   abs(hitY - current) > reanchorEpsilon {
+                    groundY = hitY
+                    waterAnchor?.transform.translation = [0, hitY, 0]
                 }
             }
 

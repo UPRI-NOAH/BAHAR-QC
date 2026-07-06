@@ -310,7 +310,9 @@ void waterSurface(realitykit::surface_parameters params)
     // pixels (mirrored upward) — lifting the tint into a luminous blue keeps
     // the water reading as water rather than a dim mirror.
     half3 waterTint = half3(0.38, 0.70, 0.92);
-    half3 tintedRefraction = mix(refraction, waterTint, half(0.42));
+    // Lighter tint on refraction so submerged content (person's legs, the
+    // ground) reads clearly through the water instead of washing out blue.
+    half3 tintedRefraction = mix(refraction, waterTint, half(0.28));
     half3 tintedReflection = mix(reflection, waterTint, half(0.32));
 
     // Reflection-dominant blend — the mirrored, warped camera feed should
@@ -330,9 +332,8 @@ void waterSurface(realitykit::surface_parameters params)
     params.surface().set_normal(rippleNormal);
     params.surface().set_roughness(half(0.03));
     params.surface().set_metallic(half(0.0));
-    // Higher opacity to match the reference — water surface dominates over
-    // the underlying ground geometry. Refraction sample of the camera feed
-    // still shows submerged content beneath, just bent through the surface
-    // rather than through transparency.
-    params.surface().set_opacity(half(0.82) * half(edgeAlpha));
+    // Semi-transparent so the real camera feed (person standing in the
+    // water, the ground) stays visible through the surface — the reference
+    // flood look is "person submerged in water", not an opaque mirror.
+    params.surface().set_opacity(half(0.62) * half(edgeAlpha));
 }
