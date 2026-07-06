@@ -613,8 +613,65 @@ private struct ARSessionView: View {
             .padding(.trailing, 28)
             .padding(.top, 72)
             .accessibilityLabel("Close flood map")
+
+            // Lower-left like the MMDA web app, but lifted clear of the
+            // Mapbox logo + attribution button at the map's bottom edge
+            // (mmda-app does the same: legend bottom offset above attribution).
+            floodLegend
+                .padding(.leading, 28)
+                .padding(.bottom, 106)
+                .frame(maxWidth: .infinity, maxHeight: .infinity,
+                       alignment: .bottomLeading)
         }
         .transition(.opacity.combined(with: .scale(scale: 0.94)))
+    }
+
+    /// Depth ranges + colors mirror the flood overlay ramp in MiniMapView
+    /// (Flow_Legend_v2).
+    private var floodLegend: some View {
+        let entries: [(Color, String)] = [
+            (Color(red: 1.00, green: 1.00, blue: 0.00), "0.20-0.50m"),
+            (Color(red: 1.00, green: 0.55, blue: 0.00), "0.51-1.00m"),
+            (Color(red: 1.00, green: 0.00, blue: 0.67), "1.01-2.00m"),
+            (Color(red: 0.55, green: 0.00, blue: 0.55), "2.01-5.00m"),
+            (Color(red: 0.00, green: 0.28, blue: 0.67), "5.01m+"),
+        ]
+        return VStack(alignment: .leading, spacing: 5) {
+            HStack(spacing: 5) {
+                Text("Flood Depth")
+                    .font(.caption.weight(.bold))
+                    .foregroundStyle(.black.opacity(0.85))
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 5)
+                    .background(Capsule().fill(.white.opacity(0.92)))
+                legendChip(entries[0])
+            }
+            HStack(spacing: 5) {
+                legendChip(entries[1])
+                legendChip(entries[2])
+            }
+            HStack(spacing: 5) {
+                legendChip(entries[3])
+                legendChip(entries[4])
+            }
+        }
+        .shadow(color: .black.opacity(0.25), radius: 4, y: 1)
+        .allowsHitTesting(false)
+        .accessibilityLabel("Flood depth legend")
+    }
+
+    private func legendChip(_ entry: (Color, String)) -> some View {
+        HStack(spacing: 6) {
+            Circle()
+                .fill(entry.0)
+                .frame(width: 10, height: 10)
+            Text(entry.1)
+                .font(.caption2.weight(.semibold))
+                .foregroundStyle(.black.opacity(0.8))
+        }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 5)
+        .background(Capsule().fill(.white.opacity(0.92)))
     }
 
     // MARK: - HUD bindings
