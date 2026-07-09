@@ -458,11 +458,15 @@ html, body {
 #advisory-popover-icon.none  { color: #22c55e; }
 
 /* ── Expanded map overlay ─────────────────────────────────────────────────── */
+/* Lives inside #ar-overlay (which has pointer-events: none), so re-enable
+   pointer events explicitly here so the backdrop + close button + map can
+   receive taps in Android WebXR immersive-ar mode. */
 #expanded-map-overlay {
   position: fixed;
   inset: 0;
   z-index: 200;
   opacity: 1;
+  pointer-events: auto;
   transition: opacity 0.3s ease;
 }
 

@@ -90,29 +90,31 @@
       </div>
     </div>
 
-  </div>
+    <!-- Expanded map overlay MUST live inside #ar-overlay so it stays
+         visible in Android WebXR immersive-ar mode (only the domOverlay
+         root and its descendants are rendered on top of the AR view). -->
+    <div id="expanded-map-overlay" class="hidden">
+      <div id="expanded-map-backdrop"></div>
+      <div id="expanded-map"></div>
+      <button id="btn-close-map" aria-label="Close flood map">✕</button>
 
-  <!-- ── Expanded map overlay (opens on mini-map tap) ────────────────── -->
-  <div id="expanded-map-overlay" class="hidden">
-    <div id="expanded-map-backdrop"></div>
-    <div id="expanded-map"></div>
-    <button id="btn-close-map" aria-label="Close flood map">✕</button>
-
-    <!-- Flood depth legend — matches iOS layout (2-column chips, lower-left) -->
-    <div id="flood-legend">
-      <div class="legend-row">
-        <div class="legend-chip legend-title">Flood Depth</div>
-        <div class="legend-chip"><span class="dot" style="background:#FFFF00"></span>0.20-0.50m</div>
-      </div>
-      <div class="legend-row">
-        <div class="legend-chip"><span class="dot" style="background:#FF8C00"></span>0.51-1.00m</div>
-        <div class="legend-chip"><span class="dot" style="background:#FF00AA"></span>1.01-2.00m</div>
-      </div>
-      <div class="legend-row">
-        <div class="legend-chip"><span class="dot" style="background:#8B008B"></span>2.01-5.00m</div>
-        <div class="legend-chip"><span class="dot" style="background:#0047AB"></span>5.01m+</div>
+      <!-- Flood depth legend — matches iOS layout (2-column chips, lower-left) -->
+      <div id="flood-legend">
+        <div class="legend-row">
+          <div class="legend-chip legend-title">Flood Depth</div>
+          <div class="legend-chip"><span class="dot" style="background:#FFFF00"></span>0.20-0.50m</div>
+        </div>
+        <div class="legend-row">
+          <div class="legend-chip"><span class="dot" style="background:#FF8C00"></span>0.51-1.00m</div>
+          <div class="legend-chip"><span class="dot" style="background:#FF00AA"></span>1.01-2.00m</div>
+        </div>
+        <div class="legend-row">
+          <div class="legend-chip"><span class="dot" style="background:#8B008B"></span>2.01-5.00m</div>
+          <div class="legend-chip"><span class="dot" style="background:#0047AB"></span>5.01m+</div>
+        </div>
       </div>
     </div>
+
   </div>
 
   <!-- Camera feed background for iOS AR mode -->
@@ -125,6 +127,6 @@
   <canvas id="ar-canvas"></canvas>
 
   <script src="https://api.mapbox.com/mapbox-gl-js/v3.7.0/mapbox-gl.js"></script>
-  <script type="module" src="js/app-ios.js?v=4"></script>
+  <script type="module" src="js/app-ios.js?v=5"></script>
 </body>
 </html>
