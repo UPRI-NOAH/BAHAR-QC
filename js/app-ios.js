@@ -54,6 +54,11 @@ let gpsWatchId   = null;
 let currentDepth = 0;
 let currentHazard = 'none';
 
+// DEBUG: force a flood depth in metres so the AR water can be tested outside
+// flood-prone areas. Set back to `null` before merging to main.
+//   Knee ~0.5, Waist ~0.95, Chest ~1.35
+const DEBUG_DEPTH_OVERRIDE = 0.95;
+
 
 /* ── Platform detection ────────────────────────────────────────────────────── */
 function isIOS() {
@@ -212,7 +217,9 @@ async function onPosition(pos) {
     renderer.setElevation(altitude, altitudeAccuracy);
   }
 
-  const modelDepth = await flood.getDepth(lat, lon);
+  const modelDepth = DEBUG_DEPTH_OVERRIDE !== null
+    ? DEBUG_DEPTH_OVERRIDE
+    : await flood.getDepth(lat, lon);
 
   if (modelDepth === null) {
     elDepthEmoji.textContent = '📍';
