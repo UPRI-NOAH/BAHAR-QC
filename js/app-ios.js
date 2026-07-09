@@ -1,7 +1,8 @@
 /**
  * BAHAR — app.js
  * Main controller: wires FloodData + ARRenderer + GPS + UI.
- * Supports both iOS (camera stream + DeviceOrientation) and Android (WebXR/ARCore).
+ * One code path for every platform (iOS Safari and Chrome Android):
+ * getUserMedia camera feed + DeviceOrientationEvent for 3DOF rotation.
  */
 
 import { FloodData }  from './flood-data-ios.js';
@@ -60,12 +61,6 @@ let currentHazard = 'none';
 const DEBUG_DEPTH_OVERRIDE = 0.95;
 
 
-/* ── Platform detection ────────────────────────────────────────────────────── */
-function isIOS() {
-  return /iPad|iPhone|iPod/.test(navigator.userAgent) ||
-    (navigator.userAgent.includes('Mac') && 'ontouchend' in document);
-}
-
 /* ── Boot sequence ─────────────────────────────────────────────────────────── */
 async function boot() {
   setStatus('Initialising…');
@@ -78,45 +73,32 @@ async function boot() {
     return;
   }
 
-  if (isIOS()) {
-    // iOS: needs camera and motion access; no WebXR required
-    if (!navigator.mediaDevices?.getUserMedia) {
-      setStatus('Camera not available. Use Safari on iOS 14.5+.', 'err');
-      return;
-    }
-    elDisclaimer.innerHTML =
-      'Requires iOS 14.5+ Safari.<br>Allow camera &amp; motion access when prompted.';
-    // Matches iOS ARSessionView's ground-detection hint.
-    elScanHint.textContent = 'Point camera at yourself, a person, or the ground';
-
-    renderer.init();
-    setStatus('Ready — tap Start AR!', 'ok');
-    elBtnStart.disabled = false;
-  } else {
-    // Android / other: WebXR immersive-ar
-    if (!navigator.xr) {
-      setStatus('WebXR not available. Use Android Chrome.', 'err');
-      return;
-    }
-    const supported = await navigator.xr.isSessionSupported('immersive-ar').catch(() => false);
-    if (!supported) {
-      setStatus('immersive-ar not supported. Use Android + ARCore.', 'err');
-      return;
-    }
-
-    renderer.init();
-    setStatus('Ready — tap Start AR!', 'ok');
-    elBtnStart.disabled = false;
+  // Same code path on every platform: rear camera as background + device
+  // orientation for rotation. WebXR is no longer used — dropping it lets
+  // Android sample the camera feed inside the water shader too (WebXR
+  // immersive-ar hides it from WebGL).
+  if (!navigator.mediaDevices?.getUserMedia) {
+    setStatus('Camera not available. Use Safari (iOS 14.5+) or Chrome.', 'err');
+    return;
   }
+
+  elDisclaimer.innerHTML =
+    'Requires modern mobile browser (iOS 14.5+ Safari or Chrome Android).<br>Allow camera &amp; motion access when prompted.';
+  elScanHint.textContent = 'Point camera at yourself, a person, or the ground';
+
+  renderer.init();
+  setStatus('Ready — tap Start AR!', 'ok');
+  elBtnStart.disabled = false;
 }
 
 /* ── Start AR ─────────────────────────────────────────────────────────────── */
 elBtnStart.addEventListener('click', async () => {
   elBtnStart.disabled = true;
 
-  // iOS 13+ requires a user-gesture to unlock DeviceOrientationEvent
-  if (isIOS() &&
-      typeof DeviceOrientationEvent !== 'undefined' &&
+  // iOS 13+ requires a user-gesture to unlock DeviceOrientationEvent.
+  // Android exposes the events without requesting permission — the
+  // requestPermission function only exists on iOS.
+  if (typeof DeviceOrientationEvent !== 'undefined' &&
       typeof DeviceOrientationEvent.requestPermission === 'function') {
     try {
       const perm = await DeviceOrientationEvent.requestPermission();
