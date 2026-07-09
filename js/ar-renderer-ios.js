@@ -1,66 +1,24 @@
 /**
- * ARRenderer — Three.js + WebXR (Android/ARCore) or Camera+DeviceOrientation (iOS).
+ * ARRenderer — Three.js + getUserMedia camera feed + DeviceOrientation.
  *
- * Auto-detects the platform:
- *  • iOS  → getUserMedia camera feed as background + DeviceOrientationEvent for 3DOF rotation.
- *  • Other → immersive-ar WebXR session (existing ARCore path).
+ * One code path for every platform (iOS Safari, Android Chrome, desktop
+ * browsers with a rear camera). We use the raw camera stream as a
+ * background texture and DeviceOrientationEvent for 3DOF rotation, rather
+ * than WebXR — that way both iOS and Android can sample the camera feed
+ * inside the water shader for reflection + refraction. WebXR immersive-ar
+ * on Android didn't expose the camera feed to WebGL, so it could only ever
+ * render a procedural teal fallback; this unifies both platforms on the
+ * same reflective water look.
  *
- * Ground detection:
- *  Android: hit-test (optional feature) → camera-height fallback.
- *  iOS:     camera-height fixed at 1.6 m — no positional tracking available.
+ * Ground detection: fixed at camera height − 1.6 m. No positional
+ * tracking (that would require ARKit / ARCore hit-test, neither of which
+ * is available to WebGL fragment shaders).
  */
 
 import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.163.0/build/three.module.js';
 
-function _isIOS() {
-  return /iPad|iPhone|iPod/.test(navigator.userAgent) ||
-    (navigator.userAgent.includes('Mac') && 'ontouchend' in document);
-}
-
-/* ── Vertex shader (Android fallback) ──────────────────────────────────────── */
+/* ── Vertex shader — passes world pos + clip-space pos ─────────────────────── */
 const WATER_VERT = /* glsl */`
-  uniform vec3 uCamPos;
-
-  varying vec3  vWorldPos;
-  varying float vDist;
-  varying vec2  vUV;
-
-  void main() {
-    vec4 worldPos = modelMatrix * vec4(position, 1.0);
-    vWorldPos = worldPos.xyz;
-    vDist     = length(worldPos.xz - uCamPos.xz);
-    vUV       = uv;
-    gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
-  }
-`;
-
-/* ── Fragment shader (Android fallback — translucent teal) ─────────────────── */
-const WATER_FRAG = /* glsl */`
-  precision highp float;
-
-  uniform float uOpacity;
-  uniform float uDepth;
-  uniform float uTime;
-  uniform vec3  uCamPos;
-
-  varying vec3  vWorldPos;
-  varying float vDist;
-  varying vec2  vUV;
-
-  void main() {
-    float distFactor = smoothstep(0.3, 3.5, vDist);
-    vec2  edgeDist = min(vUV, 1.0 - vUV);
-    float edgeFade = smoothstep(0.0, 0.08, edgeDist.x) * smoothstep(0.0, 0.08, edgeDist.y);
-    float ripple   = sin(vUV.x * 18.0 + uTime * 1.8) * cos(vUV.y * 14.0 + uTime * 1.2);
-    ripple = ripple * 0.5 + 0.5;
-    vec3  col   = vec3(0.18, 0.68, 0.88) + vec3(0.06, 0.08, 0.04) * ripple;
-    float alpha = (mix(0.08, 0.22, distFactor) + ripple * 0.04) * edgeFade * uOpacity;
-    gl_FragColor = vec4(col, clamp(alpha, 0.0, 0.30));
-  }
-`;
-
-/* ── iOS vertex shader — passes world pos + clip-space pos ─────────────────── */
-const WATER_VERT_IOS = /* glsl */`
   uniform vec3 uCamPos;
 
   varying vec4  vClipPos;
@@ -79,13 +37,13 @@ const WATER_VERT_IOS = /* glsl */`
   }
 `;
 
-/* ── iOS fragment shader — port of WaterShader.metal
+/* ── Fragment shader — port of WaterShader.metal
    Target look = sample_peg.jpg: glassy, reflective, near-colourless water
    that takes its colour from the environment. Reflection-dominant Fresnel
    blend + refraction sample so the person's submerged legs and the ground
    stay visible through the surface. Light cyan tint at low mix weights so
    outdoors reads grey-green (environment dominates), not swimming-pool blue. */
-const WATER_FRAG_IOS = /* glsl */`
+const WATER_FRAG = /* glsl */`
   precision highp float;
 
   uniform sampler2D uCameraFeed;
@@ -111,10 +69,8 @@ const WATER_FRAG_IOS = /* glsl */`
 
     // Fresnel — grazing angles reflect the sky/surroundings, straight-down
     // shows what's under the water. F0 = 0.02 (water).
-    // Bias dropped from +0.30 -> +0.15 and multiplied by a distance ramp so
-    // close-range water (screen-bottom, near the feet) shows more of the
-    // ground/refraction underneath, not the bright reflected sky that was
-    // making the near edge read as vivid blue.
+    // Bias +0.15 multiplied by a distance ramp so close-range water shows
+    // more refraction (ground/feet) instead of a vivid mirrored sky.
     vec3 viewDir = normalize(uCamPos - vWorldPos);
     float NdotV = max(dot(viewDir, vec3(0.0, 1.0, 0.0)), 0.0);
     float fresnel = 0.02 + 0.98 * pow(1.0 - NdotV, 5.0);
@@ -141,10 +97,7 @@ const WATER_FRAG_IOS = /* glsl */`
     vec2 refractUV = clamp(screenUV + wave * 0.5, 0.0, 1.0);
     vec3 refraction = texture2D(uCameraFeed, refractUV).rgb;
 
-    // Very light neutral-blue tint — pulled way down from iOS's 0.28/0.32
-    // because the web only has a flat video texture to reflect (no ARKit
-    // environment probe), so any tint reads stronger here. Environment
-    // should dominate — water looks grey-green outdoors, not cyan.
+    // Neutral grey-blue tint at very low mix — environment dominates.
     vec3 waterTint = vec3(0.55, 0.68, 0.78);
     vec3 tintedReflection = mix(reflection, waterTint, 0.14);
     vec3 tintedRefraction = mix(refraction, waterTint, 0.10);
@@ -171,16 +124,13 @@ export class ARRenderer {
     this._renderer = null;
     this._scene    = null;
     this._camera   = null;
-    this._session  = null;
     this._clock    = new THREE.Clock();
 
-    this._htSource    = null;
     this._groundY     = null;
     this._groundFound = false;
 
     this._waterPlane = null;
     this._waterMat   = null;
-    this._reticle    = null;
 
     this.floodDepth  = 0;
     this.hazardLevel = 'none';
@@ -189,8 +139,6 @@ export class ARRenderer {
     this.gpsAltitude    = null;
     this.gpsAltAccuracy = null;
 
-    // iOS-specific
-    this._iosMode       = false;
     this._videoStream   = null;
     this._orientation   = { alpha: 0, beta: 90, gamma: 0 };
     this._orientHandler = null;
@@ -201,8 +149,6 @@ export class ARRenderer {
 
   /* ─── Init ──────────────────────────────────────────────────────────────── */
   init() {
-    this._iosMode = _isIOS();
-
     this._renderer = new THREE.WebGLRenderer({
       canvas: this.canvas,
       antialias: true,
@@ -211,7 +157,7 @@ export class ARRenderer {
     this._renderer.setClearColor(0x000000, 0);
     this._renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     this._renderer.setSize(window.innerWidth, window.innerHeight);
-    this._renderer.xr.enabled = !this._iosMode;
+    this._renderer.xr.enabled = false;
 
     this._scene  = new THREE.Scene();
     this._camera = new THREE.PerspectiveCamera(70, window.innerWidth / window.innerHeight, 0.01, 100);
@@ -222,44 +168,10 @@ export class ARRenderer {
     this._scene.add(dir);
 
     this._buildWater();
-    if (!this._iosMode) this._buildReticle();
   }
 
-  /* ─── Start AR (routes to iOS or Android) ───────────────────────────────── */
+  /* ─── Start AR — rear camera + device orientation ──────────────────────── */
   async startAR() {
-    if (this._iosMode) {
-      return this._startARiOS();
-    }
-
-    if (!navigator.xr) throw new Error('WebXR not available.');
-    const ok = await navigator.xr.isSessionSupported('immersive-ar').catch(() => false);
-    if (!ok) throw new Error('immersive-ar not supported. Use Android Chrome with ARCore.');
-
-    this._session = await navigator.xr.requestSession('immersive-ar', {
-      requiredFeatures: [],
-      optionalFeatures: ['hit-test', 'dom-overlay'],
-      domOverlay: { root: this.overlayEl },
-    });
-
-    this._renderer.xr.setReferenceSpaceType('local');
-    await this._renderer.xr.setSession(this._session);
-
-    this._session.requestReferenceSpace('viewer')
-      .then(vs => this._session.requestHitTestSource({ space: vs }))
-      .then(src => {
-        this._htSource = src;
-        console.log('[BAHAR] Hit-test active.');
-      })
-      .catch(e => {
-        console.warn('[BAHAR] Hit-test unavailable, using height fallback.', e.message);
-      });
-
-    this._renderer.setAnimationLoop((t, frame) => this._onFrame(t, frame));
-  }
-
-  /* ─── iOS AR start ──────────────────────────────────────────────────────── */
-  async _startARiOS() {
-    // Start rear camera
     const stream = await navigator.mediaDevices.getUserMedia({
       video: { facingMode: 'environment', width: { ideal: 1280 }, height: { ideal: 720 } },
       audio: false,
@@ -272,7 +184,6 @@ export class ARRenderer {
     await new Promise(resolve => { videoEl.onloadedmetadata = resolve; });
     videoEl.play().catch(() => {});
 
-    // Listen for device orientation
     this._orientHandler = e => {
       this._orientation.alpha = e.alpha ?? 0;
       this._orientation.beta  = e.beta  ?? 90;
@@ -280,38 +191,30 @@ export class ARRenderer {
     };
     window.addEventListener('deviceorientation', this._orientHandler);
 
-    // Ground is fixed — will trigger onGroundFound on first frame
+    // Ground is fixed — onGroundFound fires on first frame
     this._groundY = -1.6;
 
-    this._renderer.setAnimationLoop(t => this._onFrame(t, null));
+    this._renderer.setAnimationLoop(() => this._onFrame());
   }
 
   /* ─── Stop ──────────────────────────────────────────────────────────────── */
   stop() {
     this._renderer.setAnimationLoop(null);
 
-    if (this._iosMode) {
-      if (this._orientHandler) {
-        window.removeEventListener('deviceorientation', this._orientHandler);
-        this._orientHandler = null;
-      }
-      if (this._videoStream) {
-        this._videoStream.getTracks().forEach(t => t.stop());
-        this._videoStream = null;
-      }
-      const videoEl = document.getElementById('camera-feed');
-      if (videoEl) { videoEl.srcObject = null; videoEl.style.display = 'none'; }
-    } else {
-      if (this._htSource) { this._htSource.cancel?.(); this._htSource = null; }
-      if (this._session)  { this._session.end().catch(() => {}); this._session = null; }
+    if (this._orientHandler) {
+      window.removeEventListener('deviceorientation', this._orientHandler);
+      this._orientHandler = null;
     }
+    if (this._videoStream) {
+      this._videoStream.getTracks().forEach(t => t.stop());
+      this._videoStream = null;
+    }
+    const videoEl = document.getElementById('camera-feed');
+    if (videoEl) { videoEl.srcObject = null; videoEl.style.display = 'none'; }
 
-    this._groundY        = null;
-    this._groundFound    = false;
-    this._gpsAltAtInit   = undefined;
-    this._arGroundAtInit = undefined;
+    this._groundY     = null;
+    this._groundFound = false;
     if (this._waterPlane) this._waterPlane.visible = false;
-    if (this._reticle)    this._reticle && (this._reticle.visible = false);
   }
 
   /* ─── Update GPS elevation ──────────────────────────────────────────────── */
@@ -330,7 +233,7 @@ export class ARRenderer {
     }
   }
 
-  /* ─── Apply device orientation to camera (iOS) ──────────────────────────── */
+  /* ─── Apply device orientation to camera ────────────────────────────────── */
   _applyDeviceOrientation() {
     const { alpha, beta, gamma } = this._orientation;
     const orient = window.screen?.orientation?.angle ?? 0;
@@ -351,22 +254,11 @@ export class ARRenderer {
     q.multiply(q0);
   }
 
-  /* ─── Per-frame ─────────────────────────────────────────────────────────── */
-  _onFrame(_timestamp, frame) {
-    if (this._iosMode) {
-      this._tickIOS();
-    } else {
-      if (!frame) return;
-      this._tickAR(frame);
-    }
-    this._renderer.render(this._scene, this._camera);
-  }
-
-  /* ─── iOS frame tick ────────────────────────────────────────────────────── */
-  _tickIOS() {
+  /* ─── Per-frame tick ────────────────────────────────────────────────────── */
+  _onFrame() {
     this._applyDeviceOrientation();
 
-    // Camera is fixed at world origin (0,0,0); ground is 1.6 m below
+    // Camera fixed at world origin (0,0,0); ground 1.6 m below
     const camPos = new THREE.Vector3(0, 0, 0);
     if (this._waterMat) {
       this._waterMat.uniforms.uCamPos.value.copy(camPos);
@@ -400,91 +292,8 @@ export class ARRenderer {
     } else {
       this._waterPlane.visible = false;
     }
-  }
 
-  /* ─── Android WebXR frame tick ──────────────────────────────────────────── */
-  _tickAR(frame) {
-    const refSpace = this._renderer.xr.getReferenceSpace();
-    const xrCam  = this._renderer.xr.getCamera();
-    const camPos = new THREE.Vector3();
-    xrCam.getWorldPosition(camPos);
-
-    if (this._waterMat) {
-      this._waterMat.uniforms.uCamPos.value.copy(camPos);
-      this._waterMat.uniforms.uTime.value = this._clock.getElapsedTime();
-    }
-
-    const camDir = new THREE.Vector3();
-    xrCam.getWorldDirection(camDir);
-    camDir.y = 0;
-    if (camDir.lengthSq() > 0.001) camDir.normalize();
-    else camDir.set(0, 0, -1);
-
-    /* Hit-test */
-    if (this._htSource && refSpace) {
-      const hits = frame.getHitTestResults(this._htSource);
-      if (hits.length > 0) {
-        const pose = hits[0].getPose(refSpace);
-        if (pose) {
-          const hitY = pose.transform.position.y;
-          this._groundY = this._groundY === null
-            ? hitY
-            : this._groundY * 0.85 + hitY * 0.15;
-
-          this._reticle.visible = true;
-          this._reticle.position.set(
-            pose.transform.position.x,
-            this._groundY,
-            pose.transform.position.z
-          );
-
-          if (!this._groundFound) {
-            this._groundFound = true;
-            if (typeof this.onGroundFound === 'function') this.onGroundFound(this._groundY);
-          }
-        }
-      } else {
-        this._reticle.visible = false;
-      }
-    } else {
-      /* Camera-height fallback with GPS drift correction */
-      const cameraEstimate = camPos.y - 1.6;
-      let estimated = cameraEstimate;
-
-      if (this.gpsAltitude !== null &&
-          (this.gpsAltAccuracy === null || this.gpsAltAccuracy < 15)) {
-        if (this._groundY === null) {
-          this._gpsAltAtInit   = this.gpsAltitude;
-          this._arGroundAtInit = cameraEstimate;
-        } else if (this._gpsAltAtInit !== undefined) {
-          const gpsDrift = this.gpsAltitude - this._gpsAltAtInit;
-          estimated = this._arGroundAtInit + gpsDrift;
-        }
-      }
-
-      this._groundY = this._groundY === null
-        ? estimated
-        : this._groundY * 0.95 + estimated * 0.05;
-
-      if (!this._groundFound) {
-        this._groundFound = true;
-        if (typeof this.onGroundFound === 'function') this.onGroundFound(this._groundY);
-      }
-    }
-
-    const groundY = this._groundY ?? (camPos.y - 1.6);
-    const fx = camPos.x + camDir.x * 2.5;
-    const fz = camPos.z + camDir.z * 2.5;
-
-    if (this.floodDepth > 0.2032) {
-      const waterY     = Math.min(groundY + this.floodDepth, camPos.y - 0.05);
-      const planeScale = Math.max(0.5, Math.min(this.floodDepth * 2.0 + 0.5, 3.0));
-      this._waterPlane.scale.setScalar(planeScale);
-      this._waterPlane.position.set(fx, waterY, fz);
-      this._waterPlane.visible = true;
-    } else {
-      this._waterPlane.visible = false;
-    }
+    this._renderer.render(this._scene, this._camera);
   }
 
   /* ─── Build water plane ─────────────────────────────────────────────────── */
@@ -492,57 +301,28 @@ export class ARRenderer {
     const geo = new THREE.PlaneGeometry(8, 8, 1, 1);
     geo.rotateX(-Math.PI / 2);
 
-    if (this._iosMode) {
-      // iOS: reflective surface — samples the camera video feed as a reflection texture
-      const videoEl = document.getElementById('camera-feed');
-      this._cameraTexture = new THREE.VideoTexture(videoEl);
-      this._cameraTexture.minFilter = THREE.LinearFilter;
-      this._cameraTexture.magFilter = THREE.LinearFilter;
+    const videoEl = document.getElementById('camera-feed');
+    this._cameraTexture = new THREE.VideoTexture(videoEl);
+    this._cameraTexture.minFilter = THREE.LinearFilter;
+    this._cameraTexture.magFilter = THREE.LinearFilter;
 
-      this._waterMat = new THREE.ShaderMaterial({
-        uniforms: {
-          uOpacity:    { value: 0 },
-          uDepth:      { value: 0 },
-          uTime:       { value: 0 },
-          uCamPos:     { value: new THREE.Vector3() },
-          uCameraFeed: { value: this._cameraTexture },
-        },
-        vertexShader:   WATER_VERT_IOS,
-        fragmentShader: WATER_FRAG_IOS,
-        transparent: true,
-        depthWrite:  false,
-        side: THREE.DoubleSide,
-      });
-    } else {
-      // Android WebXR: translucent teal fallback (no video texture access)
-      this._waterMat = new THREE.ShaderMaterial({
-        uniforms: {
-          uOpacity: { value: 0 },
-          uDepth:   { value: 0 },
-          uTime:    { value: 0 },
-          uCamPos:  { value: new THREE.Vector3() },
-        },
-        vertexShader:   WATER_VERT,
-        fragmentShader: WATER_FRAG,
-        transparent: true,
-        depthWrite:  false,
-        side: THREE.DoubleSide,
-      });
-    }
+    this._waterMat = new THREE.ShaderMaterial({
+      uniforms: {
+        uOpacity:    { value: 0 },
+        uDepth:      { value: 0 },
+        uTime:       { value: 0 },
+        uCamPos:     { value: new THREE.Vector3() },
+        uCameraFeed: { value: this._cameraTexture },
+      },
+      vertexShader:   WATER_VERT,
+      fragmentShader: WATER_FRAG,
+      transparent: true,
+      depthWrite:  false,
+      side: THREE.DoubleSide,
+    });
 
     this._waterPlane = new THREE.Mesh(geo, this._waterMat);
     this._waterPlane.visible = false;
     this._scene.add(this._waterPlane);
-  }
-
-  /* ─── Build placement reticle (Android only) ────────────────────────────── */
-  _buildReticle() {
-    const geo = new THREE.RingGeometry(0.06, 0.08, 32);
-    geo.rotateX(-Math.PI / 2);
-    this._reticle = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({
-      color: 0xffffff, side: THREE.DoubleSide,
-    }));
-    this._reticle.visible = false;
-    this._scene.add(this._reticle);
   }
 }
