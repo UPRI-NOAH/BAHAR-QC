@@ -127,11 +127,13 @@ const WATER_FRAG_IOS = /* glsl */`
     vec2 refractUV = clamp(screenUV + wave * 0.5, 0.0, 1.0);
     vec3 refraction = texture2D(uCameraFeed, refractUV).rgb;
 
-    // Light cyan tint — barely visible at these mix values (matches iOS).
-    // Water reads grey-green outdoors from the environment reflection.
-    vec3 waterTint = vec3(0.38, 0.70, 0.92);
-    vec3 tintedReflection = mix(reflection, waterTint, 0.32);
-    vec3 tintedRefraction = mix(refraction, waterTint, 0.28);
+    // Very light neutral-blue tint — pulled way down from iOS's 0.28/0.32
+    // because the web only has a flat video texture to reflect (no ARKit
+    // environment probe), so any tint reads stronger here. Environment
+    // should dominate — water looks grey-green outdoors, not cyan.
+    vec3 waterTint = vec3(0.55, 0.68, 0.78);
+    vec3 tintedReflection = mix(reflection, waterTint, 0.14);
+    vec3 tintedRefraction = mix(refraction, waterTint, 0.10);
 
     vec3 color = mix(tintedRefraction, tintedReflection, reflectMix);
 
@@ -164,8 +166,6 @@ export class ARRenderer {
 
     this._waterPlane = null;
     this._waterMat   = null;
-    this._gauge      = null;
-    this._gaugeTicks = null;
     this._reticle    = null;
 
     this.floodDepth  = 0;
@@ -208,7 +208,6 @@ export class ARRenderer {
     this._scene.add(dir);
 
     this._buildWater();
-    this._buildGauge();
     if (!this._iosMode) this._buildReticle();
   }
 
@@ -298,7 +297,6 @@ export class ARRenderer {
     this._gpsAltAtInit   = undefined;
     this._arGroundAtInit = undefined;
     if (this._waterPlane) this._waterPlane.visible = false;
-    if (this._gauge)      this._gauge.visible      = false;
     if (this._reticle)    this._reticle && (this._reticle.visible = false);
   }
 
@@ -316,7 +314,6 @@ export class ARRenderer {
       this._waterMat.uniforms.uOpacity.value = this.floodDepth > 0.2032 ? 1.0 : 0.0;
       this._waterMat.uniforms.uDepth.value   = this.floodDepth;
     }
-    this._updateGaugeTicks();
   }
 
   /* ─── Apply device orientation to camera (iOS) ──────────────────────────── */
@@ -386,11 +383,8 @@ export class ARRenderer {
       this._waterPlane.scale.setScalar(planeScale);
       this._waterPlane.position.set(fx, waterY, fz);
       this._waterPlane.visible = true;
-      this._gauge.position.set(fx + 0.7, groundY, fz);
-      this._gauge.visible = true;
     } else {
       this._waterPlane.visible = false;
-      this._gauge.visible      = false;
     }
   }
 
@@ -474,11 +468,8 @@ export class ARRenderer {
       this._waterPlane.scale.setScalar(planeScale);
       this._waterPlane.position.set(fx, waterY, fz);
       this._waterPlane.visible = true;
-      this._gauge.position.set(fx + 0.7, groundY, fz);
-      this._gauge.visible = true;
     } else {
       this._waterPlane.visible = false;
-      this._gauge.visible      = false;
     }
   }
 
@@ -530,25 +521,6 @@ export class ARRenderer {
     this._scene.add(this._waterPlane);
   }
 
-  /* ─── Build depth gauge ─────────────────────────────────────────────────── */
-  _buildGauge() {
-    this._gauge = new THREE.Group();
-
-    const pole = new THREE.Mesh(
-      new THREE.CylinderGeometry(0.015, 0.015, 5, 8),
-      new THREE.MeshBasicMaterial({ color: 0xdddddd })
-    );
-    pole.position.y = 2.5;
-    this._gauge.add(pole);
-
-    this._gaugeTicks = new THREE.Group();
-    this._gauge.add(this._gaugeTicks);
-    this._updateGaugeTicks();
-
-    this._gauge.visible = false;
-    this._scene.add(this._gauge);
-  }
-
   /* ─── Build placement reticle (Android only) ────────────────────────────── */
   _buildReticle() {
     const geo = new THREE.RingGeometry(0.06, 0.08, 32);
@@ -558,38 +530,5 @@ export class ARRenderer {
     }));
     this._reticle.visible = false;
     this._scene.add(this._reticle);
-  }
-
-  /* ─── Refresh gauge tick marks ──────────────────────────────────────────── */
-  _updateGaugeTicks() {
-    if (!this._gaugeTicks) return;
-    this._gaugeTicks.clear();
-
-    const maxMark = Math.max(this.floodDepth + 1, 3);
-    for (let h = 0; h <= maxMark; h += 0.5) {
-      const major = h % 1 === 0;
-      const w   = major ? 0.12 : 0.07;
-      const col = h === 0 ? 0xaaaaaa
-                : h <= 0.5 ? 0xffd166
-                : h <= 1.5 ? 0xef8c1a
-                :             0xd62828;
-
-      const tick = new THREE.Mesh(
-        new THREE.BoxGeometry(w, 0.012, 0.012),
-        new THREE.MeshBasicMaterial({ color: col })
-      );
-      tick.position.set(w / 2, h, 0);
-      this._gaugeTicks.add(tick);
-    }
-
-    if (this.floodDepth > 0) {
-      const ring = new THREE.Mesh(
-        new THREE.TorusGeometry(0.07, 0.013, 8, 24),
-        new THREE.MeshBasicMaterial({ color: 0x00b4d8 })
-      );
-      ring.rotation.x = Math.PI / 2;
-      ring.position.y = this.floodDepth;
-      this._gaugeTicks.add(ring);
-    }
   }
 }
