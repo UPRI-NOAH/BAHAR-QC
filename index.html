@@ -4,6 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
   <title>BAHAR — Metro Manila Flood AR</title>
+  <link rel="stylesheet" href="https://api.mapbox.com/mapbox-gl-js/v3.7.0/mapbox-gl.css">
   <link rel="stylesheet" href="css/style-ios.css">
 </head>
 <body>
@@ -23,8 +24,9 @@
     <div class="card">
       <div class="card-title">Metro Manila's First AR Flood App</div>
       <p class="card-desc">
-        Powered by UP NOAH's 100-year flood return model. Point your camera
-        at the ground to see the expected flood depth at your current location.
+        Powered by UP NOAH's 100-year flood return model. Point your camera at
+        a person or the ground — flood water rises to the expected depth at
+        your current location.
       </p>
     </div>
 
@@ -47,7 +49,10 @@
     <div id="ar-top">
       <div id="ar-top-row">
         <img src="NOAH LOGO.png" alt="Project NOAH" id="noah-logo-ar">
-        <button id="btn-exit" class="btn-exit">✕ Exit</button>
+        <button id="btn-exit" class="btn-exit">
+          <span class="exit-x">✕</span>
+          <span>Exit</span>
+        </button>
       </div>
 
       <div id="gps-bar">
@@ -62,12 +67,52 @@
         </div>
         <div id="depth-value">--</div>
         <div id="depth-sub">Below NOAH flood threshold</div>
-        <div id="depth-category" class="hidden"></div>
+        <div id="depth-category-row" class="hidden">
+          <span id="depth-category"></span>
+          <span id="depth-category-name"></span>
+        </div>
       </div>
     </div>
 
-    <div id="scan-hint" class="hint">Point camera at the ground to detect floor</div>
+    <div id="scan-hint" class="hint">Point camera at yourself, a person, or the ground</div>
 
+    <!-- Bottom-left column: mini-map + advisory button (mirrors iOS HUD) -->
+    <div id="ar-bottom-left">
+      <button id="mini-map-btn" aria-label="Expand flood map">
+        <div id="mini-map"></div>
+      </button>
+      <button id="btn-advisory" aria-label="Show flood advisory">
+        <span id="advisory-icon">✓</span>
+      </button>
+      <div id="advisory-popover" class="hidden">
+        <span id="advisory-popover-icon">✓</span>
+        <span id="advisory-popover-text">Safe — no flooding expected at this location for the 100-year return period.</span>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- ── Expanded map overlay (opens on mini-map tap) ────────────────── -->
+  <div id="expanded-map-overlay" class="hidden">
+    <div id="expanded-map-backdrop"></div>
+    <div id="expanded-map"></div>
+    <button id="btn-close-map" aria-label="Close flood map">✕</button>
+
+    <!-- Flood depth legend — matches iOS layout (2-column chips, lower-left) -->
+    <div id="flood-legend">
+      <div class="legend-row">
+        <div class="legend-chip legend-title">Flood Depth</div>
+        <div class="legend-chip"><span class="dot" style="background:#FFFF00"></span>0.20-0.50m</div>
+      </div>
+      <div class="legend-row">
+        <div class="legend-chip"><span class="dot" style="background:#FF8C00"></span>0.51-1.00m</div>
+        <div class="legend-chip"><span class="dot" style="background:#FF00AA"></span>1.01-2.00m</div>
+      </div>
+      <div class="legend-row">
+        <div class="legend-chip"><span class="dot" style="background:#8B008B"></span>2.01-5.00m</div>
+        <div class="legend-chip"><span class="dot" style="background:#0047AB"></span>5.01m+</div>
+      </div>
+    </div>
   </div>
 
   <!-- Camera feed background for iOS AR mode -->
@@ -79,6 +124,7 @@
   <!-- Three.js canvas (hidden until AR starts) -->
   <canvas id="ar-canvas"></canvas>
 
-  <script type="module" src="js/app-ios.js?v=3"></script>
+  <script src="https://api.mapbox.com/mapbox-gl-js/v3.7.0/mapbox-gl.js"></script>
+  <script type="module" src="js/app-ios.js?v=4"></script>
 </body>
 </html>
