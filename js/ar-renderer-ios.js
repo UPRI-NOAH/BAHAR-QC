@@ -59,59 +59,91 @@ const WATER_FRAG = /* glsl */`
   }
 `;
 
-/* ── iOS vertex shader — also outputs clip-space pos for screen UV ─────────── */
+/* ── iOS vertex shader — passes world pos + clip-space pos ─────────────────── */
 const WATER_VERT_IOS = /* glsl */`
   uniform vec3 uCamPos;
 
   varying vec4  vClipPos;
+  varying vec3  vWorldPos;
   varying float vDist;
   varying vec2  vUV;
 
   void main() {
     vec4 worldPos = modelMatrix * vec4(position, 1.0);
-    vDist    = length(worldPos.xz - uCamPos.xz);
-    vUV      = uv;
+    vWorldPos = worldPos.xyz;
+    vDist     = length(worldPos.xz - uCamPos.xz);
+    vUV       = uv;
     vec4 clip = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
     vClipPos  = clip;
     gl_Position = clip;
   }
 `;
 
-/* ── iOS fragment shader — reflective camera-feed surface with wave distortion */
+/* ── iOS fragment shader — port of WaterShader.metal
+   Target look = sample_peg.jpg: glassy, reflective, near-colourless water
+   that takes its colour from the environment. Reflection-dominant Fresnel
+   blend + refraction sample so the person's submerged legs and the ground
+   stay visible through the surface. Light cyan tint at low mix weights so
+   outdoors reads grey-green (environment dominates), not swimming-pool blue. */
 const WATER_FRAG_IOS = /* glsl */`
   precision highp float;
 
   uniform sampler2D uCameraFeed;
+  uniform vec3      uCamPos;
   uniform float     uOpacity;
   uniform float     uTime;
 
   varying vec4  vClipPos;
+  varying vec3  vWorldPos;
   varying float vDist;
   varying vec2  vUV;
 
   void main() {
-    // Screen-space UV of this fragment
     vec2 screenUV = vClipPos.xy / vClipPos.w * 0.5 + 0.5;
 
-    // Two overlapping wave patterns for organic surface distortion
-    float w1 = sin(vUV.x * 18.0 + uTime * 2.2) * cos(vUV.y * 12.0 + uTime * 1.6);
-    float w2 = sin(vUV.x * 8.0  - uTime * 1.4) * cos(vUV.y * 22.0 + uTime * 2.0);
-    vec2 distort = vec2(w1 + w2 * 0.5, w2 + w1 * 0.3) * 0.028;
+    // Multi-scale sine waves — cheap FBM-style ripple field for UV distortion
+    float t = uTime;
+    float w1 = sin(vUV.x * 20.0 + t * 2.0) * cos(vUV.y * 14.0 + t * 1.4);
+    float w2 = sin(vUV.x *  9.0 - t * 1.1) * cos(vUV.y * 24.0 + t * 1.8);
+    float w3 = sin(vUV.x * 32.0 + t * 3.0) * cos(vUV.y *  6.0 - t * 0.9);
+    vec2 wave = vec2(w1 + w2 * 0.5 + w3 * 0.30,
+                     w2 + w1 * 0.4 + w3 * 0.55) * 0.024;
 
-    // Flip Y to get the reflection of what's above the water plane
-    vec2 reflectUV = clamp(vec2(screenUV.x + distort.x, 1.0 - screenUV.y + distort.y), 0.0, 1.0);
+    // Fresnel — grazing angles reflect the sky/surroundings, straight-down
+    // shows what's under the water. F0 = 0.02 (water). Add a +0.30 bias so
+    // the mix stays reflection-dominant like the peg, matching iOS.
+    vec3 viewDir = normalize(uCamPos - vWorldPos);
+    float NdotV = max(dot(viewDir, vec3(0.0, 1.0, 0.0)), 0.0);
+    float fresnel = 0.02 + 0.98 * pow(1.0 - NdotV, 5.0);
+    float reflectMix = clamp(fresnel + 0.30, 0.0, 1.0);
+
+    // Reflection — screen UV mirrored across Y (camera sees what's above)
+    vec2 reflectUV = clamp(vec2(screenUV.x + wave.x,
+                                1.0 - screenUV.y + wave.y), 0.0, 1.0);
     vec3 reflection = texture2D(uCameraFeed, reflectUV).rgb;
 
-    // Darken and tint — floodwater is murky, not clear blue
-    vec3 waterColor = mix(reflection * 0.60, vec3(0.04, 0.07, 0.10), 0.38);
+    // Refraction — same view, gently warped, so submerged content reads
+    // through the surface instead of being masked out.
+    vec2 refractUV = clamp(screenUV + wave * 0.5, 0.0, 1.0);
+    vec3 refraction = texture2D(uCameraFeed, refractUV).rgb;
 
-    // Fade at edges and very close to camera feet
+    // Light cyan tint — barely visible at these mix values (matches iOS).
+    // Water reads grey-green outdoors from the environment reflection.
+    vec3 waterTint = vec3(0.38, 0.70, 0.92);
+    vec3 tintedReflection = mix(reflection, waterTint, 0.32);
+    vec3 tintedRefraction = mix(refraction, waterTint, 0.28);
+
+    vec3 color = mix(tintedRefraction, tintedReflection, reflectMix);
+
+    // Edge + near-distance fade so the plane doesn't clip hard against the ground
     vec2  edgeDist = min(vUV, 1.0 - vUV);
-    float edgeFade = smoothstep(0.0, 0.10, edgeDist.x) * smoothstep(0.0, 0.10, edgeDist.y);
-    float distFade = smoothstep(0.2, 1.2, vDist);
+    float edgeFade = smoothstep(0.0, 0.08, edgeDist.x)
+                   * smoothstep(0.0, 0.08, edgeDist.y);
+    float distFade = smoothstep(0.15, 1.0, vDist);
 
-    float alpha = edgeFade * distFade * uOpacity;
-    gl_FragColor = vec4(waterColor, clamp(alpha, 0.0, 0.92));
+    // Semi-transparent (~iOS 0.62) so submerged content stays visible
+    // through the surface — the flood look is "person in water", not a mirror.
+    gl_FragColor = vec4(color, 0.62 * uOpacity * edgeFade * distFade);
   }
 `;
 
