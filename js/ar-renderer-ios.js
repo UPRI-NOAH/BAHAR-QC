@@ -37,12 +37,14 @@ const WATER_VERT = /* glsl */`
   }
 `;
 
-/* ── Fragment shader — port of WaterShader.metal
-   Target look = sample_peg.jpg: glassy, reflective, near-colourless water
-   that takes its colour from the environment. Reflection-dominant Fresnel
-   blend + refraction sample so the person's submerged legs and the ground
-   stay visible through the surface. Light cyan tint at low mix weights so
-   outdoors reads grey-green (environment dominates), not swimming-pool blue. */
+/* ── Fragment shader — refraction-only water look
+   The iOS Metal shader has reflection code but uses ARKit's spherical-
+   harmonic environment probe, which is a low-frequency approximation of
+   ambient light — no crisp mirror. On the web we can only sample the raw
+   video texture, which reads as a sharp puddle-mirror of the scene above.
+   That looks wrong for floodwater. So we drop the mirrored reflection
+   entirely and use refraction + a subtle Fresnel sheen — semi-transparent
+   tinted water with a wet edge highlight, closer to the iOS feel. */
 const WATER_FRAG = /* glsl */`
   precision highp float;
 
@@ -59,7 +61,7 @@ const WATER_FRAG = /* glsl */`
   void main() {
     vec2 screenUV = vClipPos.xy / vClipPos.w * 0.5 + 0.5;
 
-    // Multi-scale sine waves — cheap FBM-style ripple field for UV distortion
+    // Multi-scale sine waves — cheap FBM-style ripple field for UV distortion.
     float t = uTime;
     float w1 = sin(vUV.x * 20.0 + t * 2.0) * cos(vUV.y * 14.0 + t * 1.4);
     float w2 = sin(vUV.x *  9.0 - t * 1.1) * cos(vUV.y * 24.0 + t * 1.8);
@@ -67,51 +69,30 @@ const WATER_FRAG = /* glsl */`
     vec2 wave = vec2(w1 + w2 * 0.5 + w3 * 0.30,
                      w2 + w1 * 0.4 + w3 * 0.55) * 0.024;
 
-    // Fresnel — grazing angles reflect the sky/surroundings, straight-down
-    // shows what's under the water. F0 = 0.02 (water).
-    // Bias +0.15 multiplied by a distance ramp so close-range water shows
-    // more refraction (ground/feet) instead of a vivid mirrored sky.
-    vec3 viewDir = normalize(uCamPos - vWorldPos);
-    float NdotV = max(dot(viewDir, vec3(0.0, 1.0, 0.0)), 0.0);
-    float fresnel = 0.02 + 0.98 * pow(1.0 - NdotV, 5.0);
-    float distReflectMul = mix(0.35, 1.0, smoothstep(0.5, 3.0, vDist));
-    float reflectMix = clamp((fresnel + 0.15) * distReflectMul, 0.0, 1.0);
-
-    // Reflection — 5-tap blurred sample so the mirrored view reads as a
-    // wobbly water reflection instead of a razor-sharp mirror. Center tap
-    // weighted 4x for a soft cross-blur. Slight darken (0.85) so bright
-    // sky samples don't blow out the surface at close range.
-    vec2 rUV = vec2(screenUV.x + wave.x, 1.0 - screenUV.y + wave.y);
-    float b = 0.008;
-    vec3 reflection = (
-      texture2D(uCameraFeed, clamp(rUV,                 0.0, 1.0)).rgb * 4.0 +
-      texture2D(uCameraFeed, clamp(rUV + vec2( b, 0.0), 0.0, 1.0)).rgb +
-      texture2D(uCameraFeed, clamp(rUV + vec2(-b, 0.0), 0.0, 1.0)).rgb +
-      texture2D(uCameraFeed, clamp(rUV + vec2(0.0,  b), 0.0, 1.0)).rgb +
-      texture2D(uCameraFeed, clamp(rUV + vec2(0.0, -b), 0.0, 1.0)).rgb
-    ) / 8.0;
-    reflection *= 0.85;
-
-    // Refraction — same view, gently warped, so submerged content reads
-    // through the surface instead of being masked out.
+    // Refraction — sample the camera feed gently warped by the ripple field.
+    // No mirrored reflection: the flat video texture would show a crisp
+    // mirror of the person / scene, which doesn't match real floodwater.
     vec2 refractUV = clamp(screenUV + wave * 0.5, 0.0, 1.0);
     vec3 refraction = texture2D(uCameraFeed, refractUV).rgb;
 
-    // Neutral grey-blue tint at very low mix — environment dominates.
+    // Very light neutral tint — the ground / feet under the water dominate.
     vec3 waterTint = vec3(0.55, 0.68, 0.78);
-    vec3 tintedReflection = mix(reflection, waterTint, 0.14);
-    vec3 tintedRefraction = mix(refraction, waterTint, 0.10);
+    vec3 color = mix(refraction, waterTint, 0.15);
 
-    vec3 color = mix(tintedRefraction, tintedReflection, reflectMix);
+    // Subtle Fresnel sheen — grazing angles get a whisper of extra brightness
+    // so the water still reads as a wet surface, not a flat colour overlay.
+    vec3 viewDir = normalize(uCamPos - vWorldPos);
+    float NdotV = max(dot(viewDir, vec3(0.0, 1.0, 0.0)), 0.0);
+    float fresnel = pow(1.0 - NdotV, 3.0);
+    color += vec3(0.08) * fresnel;
 
-    // Edge + near-distance fade so the plane doesn't clip hard against the ground
+    // Edge + near-distance fade so the plane doesn't clip hard against the ground.
     vec2  edgeDist = min(vUV, 1.0 - vUV);
     float edgeFade = smoothstep(0.0, 0.08, edgeDist.x)
                    * smoothstep(0.0, 0.08, edgeDist.y);
     float distFade = smoothstep(0.15, 1.0, vDist);
 
-    // Semi-transparent (~iOS 0.62) so submerged content stays visible
-    // through the surface — the flood look is "person in water", not a mirror.
+    // Semi-transparent (~iOS 0.62) so submerged content stays visible.
     gl_FragColor = vec4(color, 0.62 * uOpacity * edgeFade * distFade);
   }
 `;
