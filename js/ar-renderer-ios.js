@@ -110,17 +110,31 @@ const WATER_FRAG_IOS = /* glsl */`
                      w2 + w1 * 0.4 + w3 * 0.55) * 0.024;
 
     // Fresnel — grazing angles reflect the sky/surroundings, straight-down
-    // shows what's under the water. F0 = 0.02 (water). Add a +0.30 bias so
-    // the mix stays reflection-dominant like the peg, matching iOS.
+    // shows what's under the water. F0 = 0.02 (water).
+    // Bias dropped from +0.30 -> +0.15 and multiplied by a distance ramp so
+    // close-range water (screen-bottom, near the feet) shows more of the
+    // ground/refraction underneath, not the bright reflected sky that was
+    // making the near edge read as vivid blue.
     vec3 viewDir = normalize(uCamPos - vWorldPos);
     float NdotV = max(dot(viewDir, vec3(0.0, 1.0, 0.0)), 0.0);
     float fresnel = 0.02 + 0.98 * pow(1.0 - NdotV, 5.0);
-    float reflectMix = clamp(fresnel + 0.30, 0.0, 1.0);
+    float distReflectMul = mix(0.35, 1.0, smoothstep(0.5, 3.0, vDist));
+    float reflectMix = clamp((fresnel + 0.15) * distReflectMul, 0.0, 1.0);
 
-    // Reflection — screen UV mirrored across Y (camera sees what's above)
-    vec2 reflectUV = clamp(vec2(screenUV.x + wave.x,
-                                1.0 - screenUV.y + wave.y), 0.0, 1.0);
-    vec3 reflection = texture2D(uCameraFeed, reflectUV).rgb;
+    // Reflection — 5-tap blurred sample so the mirrored view reads as a
+    // wobbly water reflection instead of a razor-sharp mirror. Center tap
+    // weighted 4x for a soft cross-blur. Slight darken (0.85) so bright
+    // sky samples don't blow out the surface at close range.
+    vec2 rUV = vec2(screenUV.x + wave.x, 1.0 - screenUV.y + wave.y);
+    float b = 0.008;
+    vec3 reflection = (
+      texture2D(uCameraFeed, clamp(rUV,                 0.0, 1.0)).rgb * 4.0 +
+      texture2D(uCameraFeed, clamp(rUV + vec2( b, 0.0), 0.0, 1.0)).rgb +
+      texture2D(uCameraFeed, clamp(rUV + vec2(-b, 0.0), 0.0, 1.0)).rgb +
+      texture2D(uCameraFeed, clamp(rUV + vec2(0.0,  b), 0.0, 1.0)).rgb +
+      texture2D(uCameraFeed, clamp(rUV + vec2(0.0, -b), 0.0, 1.0)).rgb
+    ) / 8.0;
+    reflection *= 0.85;
 
     // Refraction — same view, gently warped, so submerged content reads
     // through the surface instead of being masked out.
