@@ -6,6 +6,7 @@
 
 import { FloodData }  from './flood-data-ios.js';
 import { ARRenderer } from './ar-renderer-ios.js';
+import { initMiniMap, initExpandedMap } from './mini-map.js';
 
 const flood    = new FloodData();
 const renderer = new ARRenderer(
@@ -24,12 +25,30 @@ const elDepthLabel  = document.getElementById('depth-label');
 const elDepthVal    = document.getElementById('depth-value');
 const elDepthSub    = document.getElementById('depth-sub');
 const elDepthCat    = document.getElementById('depth-category');
+const elDepthCatRow = document.getElementById('depth-category-row');
+const elDepthCatName = document.getElementById('depth-category-name');
 const elScanHint    = document.getElementById('scan-hint');
 const elLanding     = document.getElementById('screen-landing');
 const elOverlay     = document.getElementById('ar-overlay');
 const elCanvas      = document.getElementById('ar-canvas');
 const elFloodFilter = document.getElementById('flood-filter');
 const elDisclaimer  = document.querySelector('.disclaimer');
+
+/* Mini-map + advisory */
+const elMiniMapBtn      = document.getElementById('mini-map-btn');
+const elBtnAdvisory     = document.getElementById('btn-advisory');
+const elAdvisoryIcon    = document.getElementById('advisory-icon');
+const elAdvisoryPop     = document.getElementById('advisory-popover');
+const elAdvisoryPopIcon = document.getElementById('advisory-popover-icon');
+const elAdvisoryPopText = document.getElementById('advisory-popover-text');
+const elExpandedMap     = document.getElementById('expanded-map-overlay');
+const elBtnCloseMap     = document.getElementById('btn-close-map');
+const elMapBackdrop     = document.getElementById('expanded-map-backdrop');
+
+let miniMap = null;
+let expandedMap = null;
+let currentCoord = null;
+let currentCategory = 'none';
 
 let gpsWatchId   = null;
 let currentDepth = 0;
@@ -62,7 +81,8 @@ async function boot() {
     }
     elDisclaimer.innerHTML =
       'Requires iOS 14.5+ Safari.<br>Allow camera &amp; motion access when prompted.';
-    elScanHint.textContent = 'Tilt your phone to view the flood visualization';
+    // Matches iOS ARSessionView's ground-detection hint.
+    elScanHint.textContent = 'Point camera at yourself, a person, or the ground';
 
     renderer.init();
     setStatus('Ready — tap Start AR!', 'ok');
@@ -120,6 +140,14 @@ elBtnStart.addEventListener('click', async () => {
 
   startGPS();
 
+  // Boot the mini-map — non-blocking; if it fails the AR still runs.
+  initMiniMap('mini-map', currentCoord ?? undefined)
+    .then(instance => {
+      miniMap = instance;
+      if (currentCoord) miniMap.setCoordinate(currentCoord);
+    })
+    .catch(err => console.warn('[BAHAR] mini-map init failed:', err.message));
+
   renderer.onGroundFound = () => {
     elScanHint.classList.add('hidden');
   };
@@ -131,6 +159,13 @@ elBtnExit.addEventListener('click', stopAR);
 function stopAR() {
   renderer.stop();
   stopGPS();
+
+  // Close expanded map if it's open, dismiss advisory popover.
+  hideExpandedMap();
+  elAdvisoryPop.classList.add('hidden');
+
+  // Tear down the mini-map so the WebGL context is released; recreated on next AR start.
+  if (miniMap) { miniMap.destroy(); miniMap = null; }
 
   elCanvas.style.display  = 'none';
   elOverlay.classList.remove('active');
@@ -169,6 +204,10 @@ async function onPosition(pos) {
   elGpsText.textContent = `${lat.toFixed(5)}, ${lon.toFixed(5)}  ±${Math.round(accuracy)}m`;
   elGpsDot.className = accuracy <= 50 ? 'ok' : accuracy <= 100 ? '' : 'err';
 
+  currentCoord = [lon, lat];
+  miniMap?.setCoordinate(currentCoord);
+  expandedMap?.setCoordinate(currentCoord);
+
   if (altitude !== null && altitude !== undefined) {
     renderer.setElevation(altitude, altitudeAccuracy);
   }
@@ -180,7 +219,9 @@ async function onPosition(pos) {
     elDepthLabel.textContent = 'OUTSIDE COVERAGE';
     elDepthVal.textContent   = '';
     elDepthSub.textContent   = 'No flood data for this location';
-    elDepthCat.className     = 'hidden';
+    elDepthCatRow.classList.add('hidden');
+    elDepthSub.style.display = '';
+    setAdvisory('none');
     renderer.setFlood(0, 'none');
     document.body.classList.remove('submerged');
     elFloodFilter.classList.remove('active');
@@ -199,14 +240,21 @@ async function onPosition(pos) {
     elDepthLabel.textContent = 'LITTLE TO NONE';
     elDepthVal.textContent   = depthDisplay(depth);
     elDepthSub.textContent   = 'Below NOAH flood threshold';
-    elDepthCat.className     = 'hidden';
+    elDepthSub.style.display = '';
+    elDepthCatRow.classList.add('hidden');
+    setAdvisory('none');
   } else {
     elDepthEmoji.textContent = humanScaleEmoji(depth);
     elDepthLabel.textContent = humanScaleLabel(depth);
     elDepthVal.textContent   = depthDisplay(depth);
     elDepthSub.textContent   = '';
+    elDepthSub.style.display = 'none';
+    const cat = mmdaClass(depth);
     elDepthCat.textContent   = mmdaCategory(depth);
-    elDepthCat.className     = mmdaClass(depth);
+    elDepthCat.className     = cat;
+    elDepthCatName.textContent = mmdaFullName(depth);
+    elDepthCatRow.classList.remove('hidden');
+    setAdvisory(cat);
   }
 
   renderer.setFlood(depth, currentHazard);
@@ -271,6 +319,56 @@ function mmdaClass(depth) {
   if (i < 13) return 'patv';
   if (i < 26) return 'nplv';
   return 'npatv';
+}
+
+/// MMDA-verbose category name — matches MMDAGauge.Category.fullName on iOS.
+function mmdaFullName(depth) {
+  const i = depth * 39.3700787;
+  if (i < 13) return 'Passable to all types of vehicles';
+  if (i < 26) return 'Not passable to light vehicles';
+  return 'Not passable to all types of vehicles';
+}
+
+/* ── Advisory (warning) button state ──────────────────────────────────────── */
+const ADVISORY = {
+  none:  { icon: '✓',  text: 'Safe — no flooding expected at this location for the 100-year return period.' },
+  patv:  { icon: '⚠',  text: 'Proceed slowly. Keep distance from trucks and large vehicles.' },
+  nplv:  { icon: '⛔', text: 'Warning: light vehicles must detour immediately. Avoid wading.' },
+  npatv: { icon: '✕',  text: 'CRITICAL: do not attempt driving or wading. Seek higher ground.' },
+};
+
+function setAdvisory(category) {
+  currentCategory = category;
+  const info = ADVISORY[category] ?? ADVISORY.none;
+  elAdvisoryIcon.textContent = info.icon;
+  elAdvisoryIcon.className   = category;
+  elAdvisoryPopIcon.textContent = info.icon;
+  elAdvisoryPopIcon.className   = category;
+  elAdvisoryPopText.textContent = info.text;
+}
+
+elBtnAdvisory.addEventListener('click', () => {
+  elAdvisoryPop.classList.toggle('hidden');
+});
+
+/* ── Mini-map → expanded map ──────────────────────────────────────────────── */
+elMiniMapBtn.addEventListener('click', showExpandedMap);
+elBtnCloseMap.addEventListener('click', hideExpandedMap);
+elMapBackdrop.addEventListener('click', hideExpandedMap);
+
+function showExpandedMap() {
+  elExpandedMap.classList.remove('hidden');
+  // Lazy-init on first open; recreate every time so the map resizes to the
+  // new container dimensions cleanly. Cheap: NOAH style is already cached.
+  if (expandedMap) { expandedMap.destroy(); expandedMap = null; }
+  initExpandedMap('expanded-map', currentCoord ?? undefined)
+    .then(instance => { expandedMap = instance; })
+    .catch(err => console.warn('[BAHAR] expanded map failed:', err.message));
+}
+
+function hideExpandedMap() {
+  elExpandedMap.classList.add('hidden');
+  if (expandedMap) { expandedMap.destroy(); expandedMap = null; }
 }
 
 /* ── Run ───────────────────────────────────────────────────────────────────── */

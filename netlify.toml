@@ -11,6 +11,11 @@
   to     = "/.netlify/functions/tilequery"
   status = 200
 
+[[redirects]]
+  from   = "/api/config"
+  to     = "/.netlify/functions/config"
+  status = 200
+
 # Required for WebXR: COOP must be same-origin.
 # We skip COEP here so CDN (jsDelivr) assets can load without issues.
 [[headers]]
