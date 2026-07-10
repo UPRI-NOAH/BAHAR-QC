@@ -201,7 +201,7 @@ private struct ARSessionView: View {
     // flood level anywhere (for testing outside flood-prone areas).
     // Set back to nil for real GPS-based lookups before release.
     //   Knee ~0.5, Waist ~0.95, Chest ~1.35
-    private let debugDepthOverride: Double? = 0.95
+    private let debugDepthOverride: Double? = nil
 
     @StateObject private var location = LocationManager()
     @State private var flood = FloodData()
