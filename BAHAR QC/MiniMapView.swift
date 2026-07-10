@@ -94,8 +94,13 @@ struct NOAHMapView: UIViewRepresentable {
         // Depth ranges from Flow_Legend_v2 (same as mmda-app):
         //   0.20–0.50 m yellow · 0.51–1.00 m orange · 1.01–2.00 m magenta
         //   2.01–5.00 m purple · 5.01+ m cobalt
+        // Tileset stores `Var` as a string; wrap in to-number so the step
+        // expression compares against numeric stops (mirrors the web port).
         let depthColor = Exp(.step) {
-            Exp(.get) { "Var" }
+            Exp(.toNumber) {
+                Exp(.get) { "Var" }
+                0
+            }
             "rgba(0,0,0,0)"
             0.20
             "#FFFF00"
