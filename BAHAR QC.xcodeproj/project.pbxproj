@@ -704,7 +704,7 @@
 				ENABLE_USER_SELECTED_FILES = readonly;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = "BAHAR-QC-Info.plist";
-				INFOPLIST_KEY_CFBundleDisplayName = "";
+				INFOPLIST_KEY_CFBundleDisplayName = BahAR;
 				INFOPLIST_KEY_LSApplicationCategoryType = "";
 				INFOPLIST_KEY_NSCameraUsageDescription = "Used to show flood depth in AR over your surroundings";
 				INFOPLIST_KEY_NSLocationWhenInUseUsageDescription = "Used to look up flood depth at your current location";
@@ -755,7 +755,7 @@
 				ENABLE_USER_SELECTED_FILES = readonly;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = "BAHAR-QC-Info.plist";
-				INFOPLIST_KEY_CFBundleDisplayName = "";
+				INFOPLIST_KEY_CFBundleDisplayName = BahAR;
 				INFOPLIST_KEY_LSApplicationCategoryType = "";
 				INFOPLIST_KEY_NSCameraUsageDescription = "Used to show flood depth in AR over your surroundings";
 				INFOPLIST_KEY_NSLocationWhenInUseUsageDescription = "Used to look up flood depth at your current location";
