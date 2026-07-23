@@ -23,6 +23,10 @@
 		};
 /* End PBXContainerItemProxy section */
 
+/* Begin PBXBuildFile section */
+		AA00000000000000000000B1 /* MapboxMaps in Frameworks */ = {isa = PBXBuildFile; productRef = AA00000000000000000000B2 /* MapboxMaps */; };
+/* End PBXBuildFile section */
+
 /* Begin PBXFileReference section */
 		09E8BC7D2FBEF51A00179E24 /* BAHAR QC.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "BAHAR QC.app"; sourceTree = BUILT_PRODUCTS_DIR; };
 		09E8BC8A2FBEF51B00179E24 /* BAHAR QCTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = "BAHAR QCTests.xctest"; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -172,6 +176,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				AA00000000000000000000B1 /* MapboxMaps in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -408,6 +413,7 @@
 			);
 			name = "BAHAR QC";
 			packageProductDependencies = (
+				AA00000000000000000000B2 /* MapboxMaps */,
 			);
 			productName = "BAHAR QC";
 			productReference = 09E8BC7D2FBEF51A00179E24 /* BAHAR QC.app */;
@@ -491,6 +497,9 @@
 			);
 			mainGroup = 09E8BC742FBEF51A00179E24;
 			minimizedProjectReferenceProxies = 1;
+			packageReferences = (
+				AA00000000000000000000B3 /* XCRemoteSwiftPackageReference "mapbox-maps-ios" */,
+			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = 09E8BC7E2FBEF51A00179E24 /* Products */;
 			projectDirPath = "";
@@ -688,14 +697,14 @@
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
-				DEVELOPMENT_TEAM = R9KKUS4T5T;
+				DEVELOPMENT_TEAM = 49L4VBUFMK;
 				ENABLE_APP_SANDBOX = YES;
 				ENABLE_HARDENED_RUNTIME = YES;
 				ENABLE_PREVIEWS = YES;
 				ENABLE_USER_SELECTED_FILES = readonly;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = "BAHAR-QC-Info.plist";
-				INFOPLIST_KEY_CFBundleDisplayName = "";
+				INFOPLIST_KEY_CFBundleDisplayName = BahAR;
 				INFOPLIST_KEY_LSApplicationCategoryType = "";
 				INFOPLIST_KEY_NSCameraUsageDescription = "Used to show flood depth in AR over your surroundings";
 				INFOPLIST_KEY_NSLocationWhenInUseUsageDescription = "Used to look up flood depth at your current location";
@@ -739,14 +748,14 @@
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
-				DEVELOPMENT_TEAM = R9KKUS4T5T;
+				DEVELOPMENT_TEAM = 49L4VBUFMK;
 				ENABLE_APP_SANDBOX = YES;
 				ENABLE_HARDENED_RUNTIME = YES;
 				ENABLE_PREVIEWS = YES;
 				ENABLE_USER_SELECTED_FILES = readonly;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = "BAHAR-QC-Info.plist";
-				INFOPLIST_KEY_CFBundleDisplayName = "";
+				INFOPLIST_KEY_CFBundleDisplayName = BahAR;
 				INFOPLIST_KEY_LSApplicationCategoryType = "";
 				INFOPLIST_KEY_NSCameraUsageDescription = "Used to show flood depth in AR over your surroundings";
 				INFOPLIST_KEY_NSLocationWhenInUseUsageDescription = "Used to look up flood depth at your current location";
@@ -925,6 +934,25 @@
 			defaultConfigurationName = Release;
 		};
 /* End XCConfigurationList section */
+
+/* Begin XCRemoteSwiftPackageReference section */
+		AA00000000000000000000B3 /* XCRemoteSwiftPackageReference "mapbox-maps-ios" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/mapbox/mapbox-maps-ios";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 11.0.0;
+			};
+		};
+/* End XCRemoteSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		AA00000000000000000000B2 /* MapboxMaps */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = AA00000000000000000000B3 /* XCRemoteSwiftPackageReference "mapbox-maps-ios" */;
+			productName = MapboxMaps;
+		};
+/* End XCSwiftPackageProductDependency section */
 	};
 	rootObject = 09E8BC752FBEF51A00179E24 /* Project object */;
 }

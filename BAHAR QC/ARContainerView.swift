@@ -96,6 +96,7 @@ struct ARContainerView: UIViewRepresentable {
 
         private var lastUnderwater: Bool = false
         private var cameraFrameTick: Int = 0
+        private var raycastTick: Int = 0
         // Lowest camera Y observed during this AR session. Used as a robust
         // floor estimate when ARKit fails to detect the real floor plane —
         // the camera-min minus a small offset is reliably at-or-near floor
@@ -121,12 +122,13 @@ struct ARContainerView: UIViewRepresentable {
             guard let arView else { return }
             let config = ARWorldTrackingConfiguration()
             config.planeDetection = [.horizontal]
-
-            // No person segmentation — we want the water to render OVER the
-            // person, so they appear submerged through the translucent water
-            // rather than being masked out in front of it.
             config.environmentTexturing = .automatic
 
+            // No person segmentation — the semi-transparent water plane renders
+            // over the person naturally, showing them through the water up to
+            // the waterline (like the real flood effect in the reference peg).
+            // Person segmentation caused the opposite effect: it cut the person
+            // out of the water instead of showing them submerged inside it.
             arView.session.run(config, options: [.resetTracking, .removeExistingAnchors])
         }
 
@@ -151,12 +153,11 @@ struct ARContainerView: UIViewRepresentable {
             // Mirror the MMDA noise floor (8 inches = 0.2032 m): hide water
             // when the gauge reads "LITTLE TO NONE" so the AR matches the HUD.
             entity.isEnabled = currentDepth > 0.2032
-            // Visual height is heavily compressed — Mapbox's PATV "gutter
-            // deep" can read up to 0.25 m, but a real gutter is only a few
-            // centimetres. Quarter the displayed height so the AR water film
-            // surrounds objects at ankle level. The accurate depth value
-            // still drives the gauge text, colour, and wave amplitude.
-            let visualHeight = depthF * 0.25
+            // Use full flood depth so the water surface sits at the actual
+            // flood level on the body — knee-deep data shows water at knee
+            // height, waist-deep at waist height. Person segmentation handles
+            // the occlusion boundary at the waterline.
+            let visualHeight = depthF
             entity.transform.translation = [0, visualHeight, 0]
 
             // Push the depth into the water material's custom parameter so
@@ -202,6 +203,46 @@ struct ARContainerView: UIViewRepresentable {
                     groundY = cameraEstFloor
                     waterAnchor?.transform.translation = [0, cameraEstFloor, 0]
                     groundIsEstimate = true
+                }
+            }
+
+            // While the ground is still a camera-height guess, refine it with
+            // ARKit raycasts. Estimated-plane raycasts return a real measured
+            // surface height (fast, works before full plane anchors form) —
+            // far more accurate than the fixed 1.4 m hand-height assumption,
+            // which put the water surface ~15 cm too high whenever the phone
+            // was held above 1.4 m.
+            //
+            // Rays are cast from several points down the lower half of the
+            // screen, not just the centre — when the user frames a person
+            // full-body, the centre lands on the person but the bottom of the
+            // frame still sees ground. Adopting the LOWEST hit also guards
+            // against locking onto benches / tables / raised surfaces.
+            raycastTick &+= 1
+            if raycastTick % 10 == 0, groundIsEstimate, let view = arView {
+                let w = view.bounds.width
+                let h = view.bounds.height
+                let probePoints = [
+                    CGPoint(x: w * 0.5, y: h * 0.50),
+                    CGPoint(x: w * 0.5, y: h * 0.70),
+                    CGPoint(x: w * 0.5, y: h * 0.88),
+                    CGPoint(x: w * 0.25, y: h * 0.80),
+                    CGPoint(x: w * 0.75, y: h * 0.80),
+                ]
+                var lowestHitY: Float?
+                for point in probePoints {
+                    if let hit = view.raycast(from: point,
+                                              allowing: .estimatedPlane,
+                                              alignment: .horizontal).first {
+                        let hitY = hit.worldTransform.columns.3.y
+                        lowestHitY = min(lowestHitY ?? hitY, hitY)
+                    }
+                }
+                if let hitY = lowestHitY,
+                   let current = groundY,
+                   abs(hitY - current) > reanchorEpsilon {
+                    groundY = hitY
+                    waterAnchor?.transform.translation = [0, hitY, 0]
                 }
             }
 

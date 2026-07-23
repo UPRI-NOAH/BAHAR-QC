@@ -1,5 +1,8 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
-<dict/>
+<dict>
+	<key>MBXAccessToken</key>
+	<string>pk.eyJ1IjoidXByaS1ub2FoIiwiYSI6ImNtcGc1dzRkaTA2MzUycnM2MW45aHp6c2IifQ.Omx5EjJPG_6Yv_cGy7nLSw</string>
+</dict>
 </plist>

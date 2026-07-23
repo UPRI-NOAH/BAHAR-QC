@@ -158,7 +158,7 @@ private struct LandingView: View {
             VStack(alignment: .leading, spacing: 8) {
                 Text("Metro Manila's First AR Flood App")
                     .font(.headline)
-                Text("Powered by UP NOAH's 100-year flood return model. Point your camera at the ground to see the expected flood depth at your current location.")
+                Text("Powered by UP NOAH's 100-year flood return model. Point your camera at a person or the ground — flood water rises to the expected depth at your current location.")
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
             }
@@ -197,6 +197,12 @@ private struct LandingView: View {
 private struct ARSessionView: View {
     let onExit: () -> Void
 
+    // DEBUG: set to a depth in meters to bypass the NOAH lookup and force a
+    // flood level anywhere (for testing outside flood-prone areas).
+    // Set back to nil for real GPS-based lookups before release.
+    //   Knee ~0.5, Waist ~0.95, Chest ~1.35
+    private let debugDepthOverride: Double? = nil
+
     @StateObject private var location = LocationManager()
     @State private var flood = FloodData()
     @State private var floodReady = false
@@ -206,6 +212,7 @@ private struct ARSessionView: View {
     @State private var groundFound = false
     @State private var arError: String?
     @State private var underwater: Bool = false
+    @State private var mapExpanded = false
 
     // Snapshot UI state
     @State private var flashOpacity: Double = 0
@@ -253,7 +260,7 @@ private struct ARSessionView: View {
                 Spacer()
 
                 if !groundFound {
-                    Text("Point camera at the ground to detect floor")
+                    Text("Point camera at yourself, a person, or the ground")
                         .font(.footnote.weight(.medium))
                         .padding(.horizontal, 14)
                         .padding(.vertical, 8)
@@ -286,6 +293,7 @@ private struct ARSessionView: View {
                 HStack(alignment: .bottom) {
                     VStack(alignment: .leading, spacing: 12) {
                         snapshotThumbnail
+                        miniMap
                         guidelinesCard
                     }
                     Spacer()
@@ -300,6 +308,11 @@ private struct ARSessionView: View {
                 }
             }
             .padding()
+
+            // Expanded mini-map overlay.
+            if mapExpanded {
+                expandedMap
+            }
 
             // Flash overlay — fades out after each capture.
             Color.white
@@ -547,6 +560,120 @@ private struct ARSessionView: View {
         }
     }
 
+    // MARK: - Mini map
+
+    /// Small NOAH-basemap map pinned under the Exit button. Follows the GPS
+    /// fix; tap to expand into the full-screen pannable map.
+    private var miniMap: some View {
+        Button {
+            withAnimation(.spring(duration: 0.3)) { mapExpanded = true }
+        } label: {
+            NOAHMapView(coordinate: location.lastLocation?.coordinate,
+                        interactive: false)
+                .frame(width: 110, height: 110)
+                .clipShape(RoundedRectangle(cornerRadius: 14))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 14)
+                        .strokeBorder(.white.opacity(0.6), lineWidth: 1.5)
+                )
+                .shadow(color: .black.opacity(0.35), radius: 6, y: 2)
+                .allowsHitTesting(false) // gestures belong to the button
+        }
+        .accessibilityLabel("Expand flood map")
+    }
+
+    /// Full-screen pannable/zoomable map with the flood-depth overlay.
+    private var expandedMap: some View {
+        ZStack(alignment: .topTrailing) {
+            Color.black.opacity(0.5)
+                .ignoresSafeArea()
+                .onTapGesture {
+                    withAnimation(.spring(duration: 0.3)) { mapExpanded = false }
+                }
+
+            NOAHMapView(coordinate: location.lastLocation?.coordinate,
+                        interactive: true)
+                .clipShape(RoundedRectangle(cornerRadius: 20))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 20)
+                        .strokeBorder(.white.opacity(0.4), lineWidth: 1)
+                )
+                .padding(.horizontal, 16)
+                .padding(.vertical, 60)
+
+            Button {
+                withAnimation(.spring(duration: 0.3)) { mapExpanded = false }
+            } label: {
+                Image(systemName: "xmark")
+                    .font(.headline.bold())
+                    .foregroundStyle(.white)
+                    .frame(width: 40, height: 40)
+                    .glassCard(cornerRadius: 20)
+            }
+            .padding(.trailing, 28)
+            .padding(.top, 72)
+            .accessibilityLabel("Close flood map")
+
+            // Lower-left like the MMDA web app, but lifted clear of the
+            // Mapbox logo + attribution button at the map's bottom edge
+            // (mmda-app does the same: legend bottom offset above attribution).
+            floodLegend
+                .padding(.leading, 28)
+                .padding(.bottom, 106)
+                .frame(maxWidth: .infinity, maxHeight: .infinity,
+                       alignment: .bottomLeading)
+        }
+        .transition(.opacity.combined(with: .scale(scale: 0.94)))
+    }
+
+    /// Depth ranges + colors mirror the flood overlay ramp in MiniMapView
+    /// (Flow_Legend_v2).
+    private var floodLegend: some View {
+        let entries: [(Color, String)] = [
+            (Color(red: 1.00, green: 1.00, blue: 0.00), "0.20-0.50m"),
+            (Color(red: 1.00, green: 0.55, blue: 0.00), "0.51-1.00m"),
+            (Color(red: 1.00, green: 0.00, blue: 0.67), "1.01-2.00m"),
+            (Color(red: 0.55, green: 0.00, blue: 0.55), "2.01-5.00m"),
+            (Color(red: 0.00, green: 0.28, blue: 0.67), "5.01m+"),
+        ]
+        return VStack(alignment: .leading, spacing: 5) {
+            HStack(spacing: 5) {
+                Text("Flood Depth")
+                    .font(.caption.weight(.bold))
+                    .foregroundStyle(.black.opacity(0.85))
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 5)
+                    .background(Capsule().fill(.white.opacity(0.92)))
+                legendChip(entries[0])
+            }
+            HStack(spacing: 5) {
+                legendChip(entries[1])
+                legendChip(entries[2])
+            }
+            HStack(spacing: 5) {
+                legendChip(entries[3])
+                legendChip(entries[4])
+            }
+        }
+        .shadow(color: .black.opacity(0.25), radius: 4, y: 1)
+        .allowsHitTesting(false)
+        .accessibilityLabel("Flood depth legend")
+    }
+
+    private func legendChip(_ entry: (Color, String)) -> some View {
+        HStack(spacing: 6) {
+            Circle()
+                .fill(entry.0)
+                .frame(width: 10, height: 10)
+            Text(entry.1)
+                .font(.caption2.weight(.semibold))
+                .foregroundStyle(.black.opacity(0.8))
+        }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 5)
+        .background(Capsule().fill(.white.opacity(0.92)))
+    }
+
     // MARK: - HUD bindings
 
     private var gpsText: String {
@@ -643,7 +770,12 @@ private struct ARSessionView: View {
     }
 
     private func refreshDepth(latitude: Double, longitude: Double) async {
-        let d = await flood.depth(latitude: latitude, longitude: longitude) ?? 0
+        let d: Double
+        if let override = debugDepthOverride {
+            d = override
+        } else {
+            d = await flood.depth(latitude: latitude, longitude: longitude) ?? 0
+        }
         let g = await flood.gauge(for: d)
         await MainActor.run {
             depth = d
