@@ -1,7 +1,7 @@
 //
 //  ContentView.swift
 //  BAHAR QC
-//
+//A 
 //  Landing screen + AR session host. Mirrors the prototype's flow:
 //  1. Landing card explains the experience.
 //  2. Start AR → presents an ARKit horizontal-plane scene with a water plane
@@ -240,7 +240,7 @@ private struct ARSessionView: View {
                 VStack(spacing: 6) {
                     Text("AR session error").font(.caption.bold())
                     Text(arError).font(.caption).multilineTextAlignment(.center)
-                    Text("Check Settings → BAHAR QC → Camera permission.")
+                    Text("Check Settings → BahAR → Camera permission.")
                         .font(.caption2).foregroundStyle(.secondary)
                 }
                 .padding()

@@ -50,7 +50,7 @@ struct ARContainerView: UIViewRepresentable {
         let status = AVCaptureDevice.authorizationStatus(for: .video)
         switch status {
         case .denied, .restricted:
-            onSessionError?("Camera access is denied. Go to Settings → BAHAR QC and enable Camera.")
+            onSessionError?("Camera access is denied. Go to Settings → BahAR and enable Camera.")
             return view
         case .notDetermined:
             AVCaptureDevice.requestAccess(for: .video) { granted in
