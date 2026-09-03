@@ -55,10 +55,15 @@ let gpsWatchId   = null;
 let currentDepth = 0;
 let currentHazard = 'none';
 
-// DEBUG: force a flood depth in metres so the AR water can be tested outside
-// flood-prone areas. Set back to `null` before merging to main.
+// Demo mode: append `?demo=<meters>` to the URL to force a flood depth so
+// the AR water can be shown outside flood-prone areas (e.g. `?demo=0.95`
+// for waist-level). No param → real GPS + Metro Manila tilequery.
 //   Knee ~0.5, Waist ~0.95, Chest ~1.35
-const DEBUG_DEPTH_OVERRIDE = 0.95;
+const DEBUG_DEPTH_OVERRIDE = (() => {
+  const raw = new URLSearchParams(location.search).get('demo');
+  const v = parseFloat(raw);
+  return Number.isFinite(v) ? v : null;
+})();
 
 
 /* ── Boot sequence ─────────────────────────────────────────────────────────── */
