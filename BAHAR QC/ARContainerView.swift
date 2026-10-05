@@ -3,13 +3,12 @@
 //  BAHAR QC
 //
 //  SwiftUI wrapper around a RealityKit ARView configured for horizontal-plane
-//  detection. Renders a 3D water plane via CustomMaterial (WaterShader.metal)
-//  with live screen-space reflection sampled from the camera feed.
+//  detection. Detects the ground and hands it, plus the flood depth, to
+//  FloodController, which renders the water (surface, underwater view and
+//  waterline) as a full-screen post-process (FloodWater.metal).
 //
-//  Reports two signals back to SwiftUI:
-//    • `onGroundFound` — fires once when the ground anchor exists
-//    • `onUnderwaterChange` — fires whenever the camera crosses above/below
-//       the waterline, so the parent view can overlay an underwater POV
+//  Reports back to SwiftUI:
+//    • `onGroundFound` — fires once when the ground estimate exists
 //
 //  iOS only.
 //
@@ -18,7 +17,6 @@
 
 import ARKit
 import AVFoundation
-import Metal
 import RealityKit
 import SwiftUI
 import UIKit
@@ -27,20 +25,17 @@ struct ARContainerView: UIViewRepresentable {
     var floodDepth: Double
     var onGroundFound: (() -> Void)?
     var onSessionError: ((String) -> Void)?
-    /// Fires when the camera moves above/below the water plane.
-    /// `true` = camera Y is below the water surface (submerged POV).
-    var onUnderwaterChange: ((Bool) -> Void)?
 
     func makeCoordinator() -> Coordinator {
         Coordinator(onGroundFound: onGroundFound,
-                    onSessionError: onSessionError,
-                    onUnderwaterChange: onUnderwaterChange)
+                    onSessionError: onSessionError)
     }
 
     func makeUIView(context: Context) -> ARView {
         let view = ARView(frame: .zero, cameraMode: .ar, automaticallyConfigureSession: false)
         view.session.delegate = context.coordinator
         context.coordinator.arView = view
+        context.coordinator.flood = FloodController(arView: view, floodOnStart: false)
 
         guard ARWorldTrackingConfiguration.isSupported else {
             onSessionError?("ARKit world tracking is not supported on this device.")
@@ -83,19 +78,13 @@ struct ARContainerView: UIViewRepresentable {
 
     final class Coordinator: NSObject, ARSessionDelegate {
         weak var arView: ARView?
-        private var waterAnchor: AnchorEntity?
-        private var waterEntity: ModelEntity?
+        var flood: FloodController?
         private var groundY: Float?
         private var groundIsEstimate: Bool = false
-        private var currentDepth: Double = 0
         private var horizontalPlanes: [UUID: ARPlaneAnchor] = [:]
-        private let cameraPipeline: CameraReflectionPipeline?
         private let onGroundFound: (() -> Void)?
         let onSessionError: ((String) -> Void)?
-        private let onUnderwaterChange: ((Bool) -> Void)?
 
-        private var lastUnderwater: Bool = false
-        private var cameraFrameTick: Int = 0
         private var raycastTick: Int = 0
         // Lowest camera Y observed during this AR session. Used as a robust
         // floor estimate when ARKit fails to detect the real floor plane —
@@ -110,12 +99,9 @@ struct ARContainerView: UIViewRepresentable {
         private let estimatedFloorOffset: Float = 1.4
 
         init(onGroundFound: (() -> Void)?,
-             onSessionError: ((String) -> Void)?,
-             onUnderwaterChange: ((Bool) -> Void)?) {
+             onSessionError: ((String) -> Void)?) {
             self.onGroundFound = onGroundFound
             self.onSessionError = onSessionError
-            self.onUnderwaterChange = onUnderwaterChange
-            self.cameraPipeline = CameraReflectionPipeline()
         }
 
         func startSession() {
@@ -124,9 +110,9 @@ struct ARContainerView: UIViewRepresentable {
             config.planeDetection = [.horizontal]
             config.environmentTexturing = .automatic
 
-            // No person segmentation — the semi-transparent water plane renders
-            // over the person naturally, showing them through the water up to
-            // the waterline (like the real flood effect in the reference peg).
+            // No person segmentation — the water post-process shades over the
+            // person, showing them through the refracted surface up to the
+            // waterline (like the real flood effect in the reference peg).
             // Person segmentation caused the opposite effect: it cut the person
             // out of the water instead of showing them submerged inside it.
             arView.session.run(config, options: [.resetTracking, .removeExistingAnchors])
@@ -143,31 +129,14 @@ struct ARContainerView: UIViewRepresentable {
         }
 
         func updateDepth(_ depth: Double) {
-            currentDepth = depth
-            applyDepth()
-        }
-
-        private func applyDepth() {
-            guard let entity = waterEntity else { return }
-            let depthF = Float(currentDepth)
-            // Mirror the MMDA noise floor (8 inches = 0.2032 m): hide water
-            // when the gauge reads "LITTLE TO NONE" so the AR matches the HUD.
-            entity.isEnabled = currentDepth > 0.2032
-            // Use full flood depth so the water surface sits at the actual
-            // flood level on the body — knee-deep data shows water at knee
-            // height, waist-deep at waist height. Person segmentation handles
-            // the occlusion boundary at the waterline.
-            let visualHeight = depthF
-            entity.transform.translation = [0, visualHeight, 0]
-
-            // Push the depth into the water material's custom parameter so
-            // the geometry-modifier shader can scale wave amplitude to it —
-            // shallow PATV water gets small waves, deep water gets bigger.
-            if var materials = entity.model?.materials,
-               var material = materials.first as? CustomMaterial {
-                material.custom.value = SIMD4<Float>(depthF, 0, 0, 0)
-                materials[0] = material
-                entity.model?.materials = materials
+            guard let flood else { return }
+            // Mirror the MMDA noise floor (8 inches = 0.2032 m): drain the
+            // water when the gauge reads "LITTLE TO NONE" so the AR matches
+            // the HUD. Above it, the level rises to the full flood depth.
+            if depth > 0.2032 {
+                flood.setDepth(Float(depth))
+            } else {
+                flood.drain()
             }
         }
 
@@ -201,7 +170,7 @@ struct ARContainerView: UIViewRepresentable {
                 // the lowest spot the phone has been.
                 if let current = groundY, current > cameraEstFloor {
                     groundY = cameraEstFloor
-                    waterAnchor?.transform.translation = [0, cameraEstFloor, 0]
+                    flood?.setFloor(cameraEstFloor)
                     groundIsEstimate = true
                 }
             }
@@ -242,37 +211,7 @@ struct ARContainerView: UIViewRepresentable {
                    let current = groundY,
                    abs(hitY - current) > reanchorEpsilon {
                     groundY = hitY
-                    waterAnchor?.transform.translation = [0, hitY, 0]
-                }
-            }
-
-            // Underwater detection. Compare camera world Y to water surface Y.
-            if let groundY {
-                let waterY = groundY + Float(currentDepth)
-                let camY = frame.camera.transform.columns.3.y
-                let nowUnderwater = (currentDepth > 0) && (camY < waterY)
-                if nowUnderwater != lastUnderwater {
-                    lastUnderwater = nowUnderwater
-                    onUnderwaterChange?(nowUnderwater)
-                }
-            }
-
-            // Camera reflection pipeline: capture frame metadata on this (main)
-            // thread, dispatch the YpCbCr → RGB Metal compute to the pipeline's
-            // background queue. Throttled to every other frame.
-            cameraFrameTick &+= 1
-            if cameraFrameTick % 2 == 0,
-               let pipeline = cameraPipeline,
-               let view = arView {
-                let orientation = view.window?.windowScene?.interfaceOrientation ?? .portrait
-                if let job = CameraReflectionPipeline.makeJob(
-                    frame: frame,
-                    viewportSize: view.bounds.size,
-                    orientation: orientation
-                ) {
-                    pipeline.processingQueue.async {
-                        pipeline.process(job)
-                    }
+                    flood?.setFloor(hitY)
                 }
             }
         }
@@ -322,109 +261,19 @@ struct ARContainerView: UIViewRepresentable {
                 // ARKit detects one.
                 if let current = groundY, newY <= current + reanchorEpsilon {
                     groundY = newY
-                    waterAnchor?.transform.translation = [0, newY, 0]
+                    flood?.setFloor(newY)
                     groundIsEstimate = false
                 }
             } else if let current = groundY, newY < current - reanchorEpsilon {
                 groundY = newY
-                waterAnchor?.transform.translation = [0, newY, 0]
+                flood?.setFloor(newY)
             }
         }
 
         private func install(at y: Float) {
-            guard let arView else { return }
             groundY = y
-
-            let anchor = AnchorEntity(world: [0, y, 0])
-            // Subdivided mesh so the vertex-displacement geometry modifier
-            // (waterGeometry in WaterShader.metal) has vertices to push up
-            // and down — a single quad would only displace at four corners.
-            let mesh = Self.makeSubdividedPlane(size: 30, subdivisions: 80)
-
-            let entity = ModelEntity(mesh: mesh, materials: [makeWaterMaterial()])
-            anchor.addChild(entity)
-            arView.scene.addAnchor(anchor)
-
-            self.waterAnchor = anchor
-            self.waterEntity = entity
-            applyDepth()
-            self.onGroundFound?()
-        }
-
-        private func makeWaterMaterial() -> any RealityKit.Material {
-            guard let device = MTLCreateSystemDefaultDevice(),
-                  let library = device.makeDefaultLibrary() else {
-                return fallbackWaterMaterial()
-            }
-            let surfaceShader = CustomMaterial.SurfaceShader(named: "waterSurface", in: library)
-            let geometryModifier = CustomMaterial.GeometryModifier(named: "waterGeometry", in: library)
-            do {
-                var material = try CustomMaterial(
-                    surfaceShader: surfaceShader,
-                    geometryModifier: geometryModifier,
-                    lightingModel: .lit
-                )
-                material.blending = .transparent(opacity: .init(floatLiteral: 1.0))
-                if let resource = cameraPipeline?.textureResource {
-                    material.custom.texture = .init(resource)
-                }
-                return material
-            } catch {
-                onSessionError?("Water shader failed to load: \(error.localizedDescription)")
-                return fallbackWaterMaterial()
-            }
-        }
-
-        /// Procedurally-built subdivided plane mesh. The default
-        /// `MeshResource.generatePlane` returns a single quad (4 vertices), so
-        /// per-vertex wave displacement only moves the corners. This builds a
-        /// proper grid of triangles so the geometry-modifier shader can shape
-        /// real waves across the surface.
-        private static func makeSubdividedPlane(size: Float, subdivisions: Int) -> MeshResource {
-            let count = subdivisions + 1
-            let half  = size * 0.5
-            var positions: [SIMD3<Float>] = []
-            var normals:   [SIMD3<Float>] = []
-            var uvs:       [SIMD2<Float>] = []
-            positions.reserveCapacity(count * count)
-            normals.reserveCapacity(count * count)
-            uvs.reserveCapacity(count * count)
-            for j in 0..<count {
-                for i in 0..<count {
-                    let u = Float(i) / Float(subdivisions)
-                    let v = Float(j) / Float(subdivisions)
-                    positions.append(SIMD3<Float>(u * size - half, 0, v * size - half))
-                    normals.append(SIMD3<Float>(0, 1, 0))
-                    uvs.append(SIMD2<Float>(u, v))
-                }
-            }
-            var indices: [UInt32] = []
-            indices.reserveCapacity(subdivisions * subdivisions * 6)
-            for j in 0..<subdivisions {
-                for i in 0..<subdivisions {
-                    let tl = UInt32(j * count + i)
-                    let tr = tl + 1
-                    let bl = tl + UInt32(count)
-                    let br = bl + 1
-                    indices.append(contentsOf: [tl, bl, tr, tr, bl, br])
-                }
-            }
-            var descriptor = MeshDescriptor(name: "subdividedWaterPlane")
-            descriptor.positions = MeshBuffers.Positions(positions)
-            descriptor.normals   = MeshBuffers.Normals(normals)
-            descriptor.textureCoordinates = MeshBuffers.TextureCoordinates(uvs)
-            descriptor.primitives = .triangles(indices)
-            // The mesh is simple and known-valid; force-try keeps the call site clean.
-            return try! MeshResource.generate(from: [descriptor])
-        }
-
-        private func fallbackWaterMaterial() -> any RealityKit.Material {
-            var material = PhysicallyBasedMaterial()
-            material.baseColor = .init(tint: UIColor(red: 0.20, green: 0.55, blue: 0.95, alpha: 1.0))
-            material.blending = .transparent(opacity: .init(floatLiteral: 0.6))
-            material.roughness = 0.05
-            material.metallic = 0.6
-            return material
+            flood?.setFloor(y)
+            onGroundFound?()
         }
     }
 }

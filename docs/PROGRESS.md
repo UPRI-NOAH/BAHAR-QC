@@ -63,6 +63,52 @@ flood gauge system (gutter / knee / waist / chest deep).
   waterline behavior awaiting field re-test. Earlier "murky brown" tuning plan
   dropped — the reference look is the goal, not photoreal turbid water
 
+### September 29, 2026 — Water effect rebuild
+
+The whole water effect is now one full-screen Metal post-process instead of a
+water mesh + `CustomMaterial` + SwiftUI underwater overlay.
+
+- **Added `FloodShaderTypes.h`** — `FloodUniforms` struct shared by Swift and
+  Metal (brief layout, plus a `debugMode` field for the brief's verification
+  views)
+- **Added `BAHAR QC-Bridging-Header.h`** and set `SWIFT_OBJC_BRIDGING_HEADER`
+  for the app target (Debug + Release) in `project.pbxproj`
+- **Added `FloodWater.metal`** — `floodWaterKernel` exactly as in the brief
+  (per-pixel ray/plane intersection, above-water surface, underwater view,
+  per-pixel waterline + meniscus), plus debug views 1 (horizon) and 2 (floor
+  checkerboard)
+- **Added `FloodController.swift`** — brief controller with section-7
+  defaults. Deviations, all deliberate:
+  - floor comes from the app's existing ground detection via `setFloor(_:)`
+    (kept: instant estimate + raycasts + ≥1.5 m² planes, field-tuned) and is
+    smoothed as in the brief, instead of the brief's `detectFloor`
+  - `init` fixed to compile (the brief read `targetDepth` before all stored
+    properties were initialised)
+  - render-thread members marked `nonisolated` and the pipeline state
+    lock-protected, because the target defaults to `MainActor` isolation and
+    `postProcess` runs off the main thread
+- **`ARContainerView.swift`** — removed the 30 m subdivided water mesh,
+  `CustomMaterial` setup, camera-reflection scheduling and waterline
+  projection; ground changes now call `flood?.setFloor(y)`; depth now calls
+  `setDepth(_:)` above the MMDA 8-inch floor, `drain()` below it (water rises /
+  drains at 0.3 m/s instead of popping)
+- **`ContentView.swift`** — removed the SwiftUI underwater overlay and its
+  state; the kernel now draws the underwater view and waterline
+- **Deleted** `WaterShader.metal` (mesh surface/geometry shaders + camera
+  YCbCr kernel), `CameraReflection.swift` (camera-to-texture pipeline — the
+  post-process reads the rendered frame directly) and `FloodFilterOverlay.swift`
+  (SwiftUI underwater overlay)
+- Docs updated: `ARCHITECTURE.md`, `README.md`
+- **Underwater colour tuned (departs from brief):** the brief's pale tint
+  left the underwater view grey and the surface overhead near-white. Underwater
+  tint changed (0.62, 0.72, 0.82) → (0.05, 0.30, 0.50), strength 0.75 → 0.9;
+  the ×1.15 brightening of the underside removed; the total-internal-reflection
+  colour now uses the underwater tint instead of the above-water tint
+- **Oct 2 — surface seen from below made see-through (departs from brief):**
+  total internal reflection now blends at most 35% flat tint
+  (`tirOpacity` in `FloodWater.metal`), so the refracted scene above stays
+  visible at grazing angles instead of a solid colour band
+
 ---
 
 ## Current status
@@ -70,25 +116,23 @@ flood gauge system (gutter / knee / waist / chest deep).
 | Item | Status |
 |---|---|
 | AR flood water with MMDA-accurate depth | ✅ Working |
-| Water surface look vs. reference (sample_peg) | ✅ Achieved — glassy, environment-colored |
-| Person appears submerged in water (body filter) | ✅ Fixed — pending field re-test |
-| Waterline at correct body height | ✅ Fixed — pending field re-test |
+| Person appears submerged in water (body filter) | ✅ Working |
+| Waterline at correct body height | ✅ Working |
 | GPS flood lookup (NOAH 100-yr model) | ✅ Working |
 | Mini-map: NOAH basemap + flood overlay + live location | ✅ Working (Mapbox SDK) |
-| Underwater point-of-view effect | ✅ Working |
+| Underwater view + moving waterline (in-kernel) | Working |
 | AR snapshot & sharing | ✅ Working |
 
 ## Next steps
 
-1. **Field re-test** of the corrected body filter in a real setting
-2. **Street-level disclaimer** — the AR assumes the user is at ground level; a user
+1. **Street-level disclaimer** — the AR assumes the user is at ground level; a user
    on an upper floor would see flood water incorrectly rendered at their floor
-3. Disable the developer depth-override before any release build
-4. **TestFlight** distribution for stakeholder testing
-5. Optional polish: reflection legibility (the reference's mirrored content is
+2. Disable the developer depth-override before any release build
+3. **TestFlight** distribution for stakeholder testing
+4. Optional polish: reflection legibility (the reference's mirrored content is
    slightly more readable than the current marbled streaks) — only if field
    re-tests show a gap
-6. **Android reach** — bring the web version to design parity (~1 week; full AR
+5. **Android reach** — bring the web version to design parity (~1 week; full AR
    works on Android Chrome via WebXR); native Android app (~3–4 weeks) only if
    later justified
 

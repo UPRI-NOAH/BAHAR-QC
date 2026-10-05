@@ -211,7 +211,6 @@ private struct ARSessionView: View {
     @State private var gauge: MMDAGauge = .none
     @State private var groundFound = false
     @State private var arError: String?
-    @State private var underwater: Bool = false
     @State private var mapExpanded = false
 
     // Snapshot UI state
@@ -229,12 +228,9 @@ private struct ARSessionView: View {
             ARContainerView(
                 floodDepth: depth,
                 onGroundFound: { groundFound = true },
-                onSessionError: { msg in arError = msg },
-                onUnderwaterChange: { isUnder in underwater = isUnder }
+                onSessionError: { msg in arError = msg }
             )
             .ignoresSafeArea()
-
-            UnderwaterPOVOverlay(active: underwater)
 
             if let arError {
                 VStack(spacing: 6) {
