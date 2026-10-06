@@ -111,11 +111,17 @@ struct ARContainerView: UIViewRepresentable {
             config.planeDetection = [.horizontal]
             config.environmentTexturing = .automatic
 
-            // No person segmentation — the water post-process shades over the
-            // person, showing them through the refracted surface up to the
-            // waterline (like the real flood effect in the reference peg).
-            // Person segmentation caused the opposite effect: it cut the person
-            // out of the water instead of showing them submerged inside it.
+            // Depth lets the water shader skip pixels where a real surface
+            // (wall, person) sits in front of the water — without it the
+            // waterline creeps up to eye level. LiDAR covers everything;
+            // otherwise ARKit's people depth at least covers people. Only the
+            // depth map is used: the post-process has no virtual content for
+            // RealityKit's own people occlusion to cut out.
+            if ARWorldTrackingConfiguration.supportsFrameSemantics(.smoothedSceneDepth) {
+                config.frameSemantics.insert(.smoothedSceneDepth)
+            } else if ARWorldTrackingConfiguration.supportsFrameSemantics(.personSegmentationWithDepth) {
+                config.frameSemantics.insert(.personSegmentationWithDepth)
+            }
             arView.session.run(config, options: [.resetTracking, .removeExistingAnchors])
         }
 

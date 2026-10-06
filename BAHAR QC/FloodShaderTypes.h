@@ -14,12 +14,14 @@ typedef struct {
     simd_float4x4 invProjection;    // clip -> camera space
     simd_float4x4 cameraToWorld;    // camera space -> world
     simd_float4x4 viewProjection;   // world -> clip
+    simd_float3x3 viewToDepthUV;    // screen uv -> depth-map uv (inverted ARFrame.displayTransform)
     simd_float3   cameraPosition;
     simd_float3   waterTint;
     simd_float3   underwaterTint;
     simd_float3   skyColor;
     simd_float3   sunDirection;     // world space, pointing toward the sun
     float enabled;                  // 0 or 1
+    float hasDepth;                 // 1 when texture(2) holds an ARKit depth map (m)
     float time;
     float waterHeight;              // calm water level, world Y (m)
     float waveAmp, waveSpeed, waveScale;

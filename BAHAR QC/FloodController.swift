@@ -44,6 +44,9 @@ final class FloodController {
     private nonisolated let lock = NSLock()
     private nonisolated(unsafe) var pipeline: MTLComputePipelineState?
     private nonisolated(unsafe) var snapshot = FloodUniforms()
+    private nonisolated(unsafe) var depthBuffer: CVPixelBuffer?
+    private nonisolated(unsafe) var textureCache: CVMetalTextureCache?
+    private nonisolated(unsafe) var emptyDepth: MTLTexture?   // bound when there's no depth map
 
     init(arView: ARView, floodOnStart: Bool = true) {
         self.arView = arView
@@ -85,7 +88,19 @@ final class FloodController {
         u.cameraToWorld = camToWorld
         u.cameraPosition = SIMD3(camToWorld.columns.3.x, camToWorld.columns.3.y, camToWorld.columns.3.z)
         u.time = Float(CACurrentMediaTime() - startTime)
-        lock.lock(); snapshot = u; lock.unlock()
+
+        // LiDAR depth if available, else ARKit's people-only depth.
+        var depth: CVPixelBuffer?
+        if let frame = arView.session.currentFrame {
+            depth = frame.smoothedSceneDepth?.depthMap ?? frame.sceneDepth?.depthMap ?? frame.estimatedDepthData
+            let orientation = arView.window?.windowScene?.interfaceOrientation ?? .portrait
+            let t = frame.displayTransform(for: orientation, viewportSize: arView.bounds.size).inverted()
+            u.viewToDepthUV = simd_float3x3(SIMD3(Float(t.a), Float(t.b), 0),
+                                            SIMD3(Float(t.c), Float(t.d), 0),
+                                            SIMD3(Float(t.tx), Float(t.ty), 1))
+        }
+        u.hasDepth = depth != nil ? 1 : 0
+        lock.lock(); snapshot = u; depthBuffer = depth; lock.unlock()
     }
 
     private func moveTowards(_ a: Float, _ b: Float, _ step: Float) -> Float {
@@ -98,14 +113,31 @@ final class FloodController {
             assertionFailure("floodWaterKernel not found in default Metal library"); return
         }
         let state = try? device.makeComputePipelineState(function: fn)
-        lock.lock(); pipeline = state; lock.unlock()
+        var cache: CVMetalTextureCache?
+        CVMetalTextureCacheCreate(nil, nil, device, nil, &cache)
+        let desc = MTLTextureDescriptor.texture2DDescriptor(pixelFormat: .r32Float, width: 1, height: 1, mipmapped: false)
+        let empty = device.makeTexture(descriptor: desc)
+        lock.lock(); pipeline = state; textureCache = cache; emptyDepth = empty; lock.unlock()
     }
 
     private nonisolated func postProcess(_ ctx: ARView.PostProcessContext) {
         lock.lock()
         let pipeline = self.pipeline
         var u = snapshot
+        let depthBuffer = self.depthBuffer
+        let textureCache = self.textureCache
+        let emptyDepth = self.emptyDepth
         lock.unlock()
+
+        var cvDepth: CVMetalTexture?
+        if let depthBuffer, let textureCache {
+            CVMetalTextureCacheCreateTextureFromImage(nil, textureCache, depthBuffer, nil, .r32Float,
+                                                      CVPixelBufferGetWidth(depthBuffer),
+                                                      CVPixelBufferGetHeight(depthBuffer),
+                                                      0, &cvDepth)
+        }
+        let depthTex = cvDepth.flatMap(CVMetalTextureGetTexture)
+        if depthTex == nil { u.hasDepth = 0 }
 
         guard let pipeline, let enc = ctx.commandBuffer.makeComputeCommandEncoder() else {
             // never leave the target empty (black screen): pass the frame through
@@ -120,6 +152,7 @@ final class FloodController {
         enc.setComputePipelineState(pipeline)
         enc.setTexture(ctx.sourceColorTexture, index: 0)
         enc.setTexture(ctx.targetColorTexture, index: 1)
+        enc.setTexture(depthTex ?? emptyDepth, index: 2)
         enc.setBytes(&u, length: MemoryLayout<FloodUniforms>.stride, index: 0)
         let w = pipeline.threadExecutionWidth
         let h = pipeline.maxTotalThreadsPerThreadgroup / w
@@ -128,6 +161,9 @@ final class FloodController {
                                     depth: 1),
                             threadsPerThreadgroup: MTLSize(width: w, height: h, depth: 1))
         enc.endEncoding()
+        // The CVMetalTexture must outlive the GPU's use of its MTLTexture.
+        nonisolated(unsafe) let keepAlive = cvDepth
+        ctx.commandBuffer.addCompletedHandler { _ in _ = keepAlive }
     }
 
     // MARK: Defaults (brief section 7, except the underwater tint/strength,

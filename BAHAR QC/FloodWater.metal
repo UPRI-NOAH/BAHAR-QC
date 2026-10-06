@@ -13,6 +13,7 @@ using namespace metal;
 #include "FloodShaderTypes.h"
 
 constexpr sampler linClamp(filter::linear, address::clamp_to_edge);
+constexpr sampler nearClamp(filter::nearest, address::clamp_to_edge);   // r32Float isn't filterable everywhere
 
 // ---- waves (world space, meters) ----
 float waveHeight(float2 xz, constant FloodUniforms& u) {
@@ -75,6 +76,7 @@ float3 underwaterGrade(float3 c, constant FloodUniforms& u) {
 
 kernel void floodWaterKernel(texture2d<float, access::sample> src [[texture(0)]],
                              texture2d<float, access::write>  dst [[texture(1)]],
+                             texture2d<float, access::sample> depthMap [[texture(2)]],
                              constant FloodUniforms& u            [[buffer(0)]],
                              uint2 gid [[thread_position_in_grid]])
 {
@@ -105,6 +107,21 @@ kernel void floodWaterKernel(texture2d<float, access::sample> src [[texture(0)]]
         t = (waveHeight(p0.xz, u) - ro.y) / rd.y;
     }
     hit = hit && t > 0.0;
+
+    // 3b. real-world occlusion. Without it, a wall or person *above* the water
+    // still gets painted, because the ray meets the plane somewhere behind
+    // them — the waterline then climbs to eye level and follows the camera.
+    // If the measured surface is closer than the water hit, it is above the
+    // surface (camera above) or in the water before it (camera below): either
+    // way no surface is drawn on that pixel.
+    if (hit && u.hasDepth > 0.5) {
+        float2 duv = (u.viewToDepthUV * float3(uv, 1.0)).xy;
+        float  d   = depthMap.sample(nearClamp, duv).r;      // metres along camera -Z
+        if (d > 0.0 && -dirCS.z > 1e-4) {
+            float tReal = d / -dirCS.z;                      // distance along the ray
+            if (tReal + 0.05 < t) hit = false;
+        }
+    }
 
     // Verification views for the ray setup (1) and floor/level placement (2).
     if (u.debugMode > 0.5) {
