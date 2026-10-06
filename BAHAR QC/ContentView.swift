@@ -236,7 +236,7 @@ private struct ARSessionView: View {
                 VStack(spacing: 6) {
                     Text("AR session error").font(.caption.bold())
                     Text(arError).font(.caption).multilineTextAlignment(.center)
-                    Text("Check Settings → BAHAR QC → Camera permission.")
+                    Text("Check Settings → BahAR QC → Camera permission.")
                         .font(.caption2).foregroundStyle(.secondary)
                 }
                 .padding()
