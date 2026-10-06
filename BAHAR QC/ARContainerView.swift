@@ -86,6 +86,7 @@ struct ARContainerView: UIViewRepresentable {
         let onSessionError: ((String) -> Void)?
 
         private var raycastTick: Int = 0
+        private var raycastRefined: Bool = false
         // Lowest camera Y observed during this AR session. Used as a robust
         // floor estimate when ARKit fails to detect the real floor plane —
         // the camera-min minus a small offset is reliably at-or-near floor
@@ -207,11 +208,17 @@ struct ARContainerView: UIViewRepresentable {
                         lowestHitY = min(lowestHitY ?? hitY, hitY)
                     }
                 }
+                // Only the first refinement of the camera-height guess may
+                // raise the floor. After that, hits only lower it — otherwise
+                // looking down at a raised surface (feet, furniture, a person)
+                // drags the floor up, and the water with it.
                 if let hitY = lowestHitY,
                    let current = groundY,
-                   abs(hitY - current) > reanchorEpsilon {
+                   hitY < current - reanchorEpsilon
+                    || (!raycastRefined && hitY > current + reanchorEpsilon) {
                     groundY = hitY
                     flood?.setFloor(hitY)
+                    raycastRefined = true
                 }
             }
         }
