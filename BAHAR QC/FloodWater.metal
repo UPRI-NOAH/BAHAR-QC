@@ -180,30 +180,29 @@ kernel void floodWaterKernel(texture2d<float, access::sample> src [[texture(0)]]
             float  NdotV = saturate(dot(-N, -rd));
             float3 refr  = src.sample(linClamp, uv + N.xz * u.refractionStrength * 1.5).rgb;
 
-            // Snell's window: inside the ~49 deg cone you see the bright world above
             float tir    = 1.0 - smoothstep(0.55, 0.75, NdotV);
             float window = 1.0 - tir;
-            refr += u.skyColor * 0.20 * window;                     // lift the window
+            refr += u.skyColor * u.underwaterTint * 0.15 * window;
 
             // Lighter TIR colour (was tint * 0.6) and lower opacity
             const float tirOpacity = 0.25;
-            float3 tirColor = mix(u.underwaterTint, float3(1.0), 0.35);
+            float3 tirColor = mix(u.underwaterTint, float3(1.0), 0.20);
 
             // Soft bright ring where the window meets the TIR region
             float rim = smoothstep(0.50, 0.62, NdotV) * (1.0 - smoothstep(0.62, 0.80, NdotV));
 
             col  = underwaterGrade(mix(refr, tirColor, tir * tirOpacity), u);
-            col += u.skyColor * rim * 0.12;
-
-            // Glow toward the surface the more you look up
-            col = mix(col, col + float3(0.08, 0.10, 0.10), saturate(rd.y) * 0.8);
+            col += u.skyColor * u.underwaterTint * rim * 0.10;
+            col  = mix(col, col + float3(0.08, 0.10, 0.10), saturate(rd.y) * 0.8);
         }
 
         // Lighter vignette when looking up
         float2 d  = uv - 0.5;
         float vig = u.vignette * (1.0 - 0.7 * saturate(rd.y));
         col *= saturate(1.0 - dot(d, d) * vig);
+
     }
+
 
     // 6. meniscus at the waterline
     float men = 1.0 - smoothstep(0.0, u.meniscusWidth, fabs(lensDepth));
