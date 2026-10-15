@@ -36,12 +36,12 @@ simplified Three.js preview for quick browser demos.
 | File | Responsibility |
 |---|---|
 | `ContentView.swift` | SwiftUI shell: landing page, AR HUD (MMDA depth card, GPS capsule, guidelines), snapshot capture/share, mini-map placement |
-| `ARContainerView.swift` | AR session: ground detection, water plane anchoring, underwater detection, camera-reflection scheduling |
-| `WaterShader.metal` | Water look: FBM wave displacement (geometry modifier) + surface shader with screen-space reflection, refraction, fresnel |
-| `CameraReflection.swift` | Metal compute pipeline converting the camera feed (YpCbCr → RGB) into a texture the shader samples for live reflections |
+| `ARContainerView.swift` | AR session: ground detection; hands the ground height and MMDA-gated flood depth to `FloodController` |
+| `FloodController.swift` | Owns the water post-process: floor smoothing, water-level animation (`flood()` / `drain()` / `setDepth(_:)`), per-frame uniforms, `ARView.renderCallbacks` (`prepareWithDevice` + `postProcess`) |
+| `FloodWater.metal` | `floodWaterKernel`: one full-screen compute pass — per-pixel ray/water-plane intersection, above-water surface, underwater view, waterline meniscus |
+| `FloodShaderTypes.h` | `FloodUniforms` struct shared by Swift (via `BAHAR QC-Bridging-Header.h`) and Metal so the memory layout matches exactly |
 | `FloodData.swift` | Flood depth lookup via the Netlify tilequery proxy + MMDA gauge classification + ~5 m response cache |
 | `MiniMapView.swift` | Mapbox SDK map: NOAH terrain basemap + flood-depth overlay added at runtime; mini (follow-GPS) and expanded (pan/zoom) modes |
-| `FloodFilterOverlay.swift` | Full-screen "underwater POV" drawn when the camera goes below the waterline |
 | `LocationManager.swift` | CoreLocation wrapper (2 m distance filter) |
 
 ### Data flow (per GPS update)
@@ -51,7 +51,9 @@ simplified Three.js preview for quick browser demos.
    ~5 m quantized cache, then calls `/api/tilequery`
 3. Response's `Var` property = flood depth in meters (max across overlapping polygons)
 4. `MMDAGauge.from(depthMeters:)` classifies it (PATV / NPLV / NPATV + description)
-5. HUD updates; `ARContainerView.updateDepth()` raises the water plane
+5. HUD updates; `ARContainerView.updateDepth()` calls `FloodController.setDepth(_:)`
+   (or `drain()` below the MMDA noise floor) and the water level animates to it
+   at 0.3 m/s
 
 ### Ground detection (three cooperating strategies)
 
@@ -69,34 +71,67 @@ directly controls where the waterline lands on a person's body:
 A safety rule pulls the ground down if the phone is ever physically lower than
 it (the water can never sit above the lowest point the phone has been).
 
+Every ground change is passed to `FloodController.setFloor(_:)`, which smooths
+it (exponential, rate 4/s) so refinements glide instead of jumping. This app
+detection is used instead of the implementation brief's simpler `detectFloor`
+(lowest plane ≥ 0.4 m², preferring `.floor` classification) because it shows
+water immediately and was already field-tuned against tables and benches.
+
 ### The body-filter effect (why there is NO person segmentation)
 
 The "person standing in flood" effect needs the water surface to cross the
 body at the waterline. ARKit person segmentation cannot do this — it composites
 the *entire* person in front of virtual content, which cut a person-shaped hole
 in the water. Instead, we exploit plain geometry: a horizontal water plane at
-`ground + depth` projects onto the person's body at exactly the flood height
-(their upper body rises above the plane in screen space; the submerged half is
-behind the semi-transparent surface). No ML, no masks — just a correctly-placed
-plane and 0.62 opacity.
+`ground + depth` projects onto the person's body at exactly the flood height,
+and the submerged half shows through the refracted surface. No ML, no masks.
 
-### Water rendering
+Limit (unchanged from the earlier mesh version): without depth data, any pixel
+whose view ray reaches the water plane — including a real object standing
+*in front of* water further away — is shaded as water. Only content above the
+camera's horizon is guaranteed dry. The fix is the brief's LiDAR upgrade
+(`sceneDepth` + skip water where the real surface is closer than the water
+hit), not yet implemented.
 
-- **Geometry:** 30 m plane subdivided 80×80 so the vertex shader can shape real
-  waves (FBM), amplitude scaled by flood depth (shallow = ripples, deep = swells)
-- **Surface:** screen-space reflection of the live camera feed (via
-  `CameraReflection` texture), refraction with chromatic aberration, fresnel
-  blend, sun sparkle
-- **MMDA sync:** the plane is hidden entirely below the 8-inch (0.2032 m) MMDA
-  noise floor so AR always agrees with the HUD reading
-- **Visual target:** the reference image (`sample_peg.jpg`) — glassy, calm,
-  near-colorless water whose color comes from the reflected/refracted
-  surroundings, with the submerged body and ground visible through it. This is
-  why the shader is reflection-dominant with a low tint mix (0.28 refraction /
-  0.32 reflection) and 0.62 opacity: outdoors the surface reads grey-green from
-  the environment, not blue, even though the tint constant is cyan. A murky
-  opaque-brown "photoreal" look was deliberately rejected — it would hide the
-  submerged body and kill the signature effect
+### Water rendering (full-screen post-process)
+
+Rebuilt Sep 29, 2026 from the *AR Flood Water Effect — ARKit/RealityKit
+Implementation Brief*. There is **no water mesh and no `CustomMaterial`**:
+`FloodController` installs `ARView.renderCallbacks.postProcess`, and
+`floodWaterKernel` runs once per frame over the whole screen. For every pixel
+it builds a world-space view ray, intersects it analytically with the water
+plane (refined once with the wave height), and shades it:
+
+- **Above water:** ripple normal (3 swells + 2-octave gradient-noise ripples),
+  refraction of the rendered frame, screen-space reflection (sky colour where
+  the reflection leaves the screen), Fresnel blend, sun glint, 25–40 m
+  distance fade back to the camera feed. The plane is infinite, so no edges.
+- **Underwater:** wobble + blue-grey grade of the camera feed, the underside
+  of the surface overhead (bright window straight up, total internal
+  reflection past ~49°), vignette.
+- **Waterline:** decided per pixel from a "lens point" 5 cm along the ray —
+  lowering the phone through the level sweeps a moving waterline with a thin
+  bright meniscus across the screen, then goes fully underwater.
+- **Threading:** logic runs on the main thread (RealityKit scene update)
+  and publishes a lock-protected `FloodUniforms` snapshot; the render-thread
+  callback only reads it and adds `ctx.projection`. Because the app target
+  defaults to `MainActor` isolation, the render-side members are
+  `nonisolated`.
+- **MMDA sync:** below the 8-inch (0.2032 m) noise floor the controller
+  drains to 0 and the kernel passes the frame through untouched, so AR always
+  agrees with the HUD reading.
+- **Tuning:** every value is a field of `FloodController.settings`
+  (defaults = brief section 7: e.g. `waveAmp` 0.025 m, `refractionStrength`
+  0.05, `reflectionStrength` 0.9, tint (0.62, 0.72, 0.76) above). Exception:
+  underwater tint is (0.05, 0.30, 0.50) at strength 0.9 (brief: pale
+  (0.62, 0.72, 0.82) at 0.75), and the underside of the surface is no longer
+  brightened ×1.15 — the brief's values left the overhead view near-white.
+  Total internal reflection is also capped at 35% (`tirOpacity`), so the
+  surface seen from below stays see-through instead of solid at grazing
+  angles.
+- **Visual target:** still glassy, near-colourless water that takes its
+  colour from the surroundings (the brief's neutral tints match the
+  `sample_peg.jpg` goal).
 
 ---
 
@@ -160,6 +195,12 @@ text and the AR water visibility.
 - **Depth override:** `debugDepthOverride` in `ContentView.swift` forces a flood
   depth anywhere (bypasses the NOAH lookup) for testing outside flood-prone
   areas. Must be `nil` in release builds.
+- **Water debug views:** set `flood.settings.debugMode` on the
+  `FloodController` — `1` paints pixels whose view ray points down red (the
+  boundary must track the real horizon when tilting), `2` paints the water hit
+  point as a 1 m world-space checkerboard (must lie flat on the real floor and
+  stay stable while walking). `0` = normal rendering. Only active while water
+  is shown (depth above the noise floor).
 - **Solo testing:** mirror the phone to a Mac (QuickTime → New Movie Recording →
   iPhone as source) or use iOS screen recording, prop the phone up, and walk
   into frame.
@@ -204,9 +245,8 @@ Every iOS component has a direct counterpart:
 | iOS | Android | Difficulty |
 |---|---|---|
 | ARKit (planes, raycasts) | ARCore `Session` / `Plane` / `hitTest()` | Easy — 1:1 mapping; the 5-point raycast + lowest-hit + ≥1.5 m² plane logic translates directly |
-| RealityKit water plane | SceneView (Filament) or OpenGL ES | Medium |
-| `WaterShader.metal` | Filament material / GLSL | **Long pole** — Metal→GLSL rewrite, but FBM/fresnel math copies over |
-| `CameraReflection.swift` | ARCore `acquireCameraImage` | Easier than iOS |
+| RealityKit `renderCallbacks.postProcess` | SceneView (Filament) post-process or OpenGL ES full-screen pass | Medium |
+| `FloodWater.metal` (post-process) | Filament post-process / GLSL full-screen pass | **Long pole** — Metal→GLSL rewrite, but the ray/plane, wave and Fresnel math copies over |
 | SwiftUI HUD | Jetpack Compose | Mechanical |
 | Mapbox Maps iOS SDK | Mapbox Maps Android SDK v11 | Near copy-paste — same v11 API, same token |
 | `FloodData.swift` | Retrofit/Ktor → same Netlify endpoint | Trivial (the proxy exists for this) |

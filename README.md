@@ -90,25 +90,23 @@ underlying data is always visible for accuracy checks.
 
 ## Water shader
 
-The water is a `CustomMaterial` driven by `BAHAR QC/WaterShader.metal`:
+The water is a single full-screen Metal post-process
+(`ARView.renderCallbacks.postProcess`) — there is no water mesh and no
+`CustomMaterial`. `FloodController.swift` feeds per-frame uniforms
+(`FloodShaderTypes.h`, shared with Swift through the bridging header) to the
+`floodWaterKernel` compute kernel in `BAHAR QC/FloodWater.metal`, which for
+every pixel intersects the view ray with the water plane and shades it:
 
-- **Geometry modifier** displaces a subdivided plane mesh (30 m × 30 m,
-  80 × 80 subdivisions) using a four-layer wave height field.
-- **Surface shader** does fresnel-driven mixing between:
-  - a heavily warped **refraction** of the camera feed (three-scale UV
-    warp + chromatic-aberration split, so submerged objects bend at
-    multiple scales),
-  - a separately warped **reflection** of the camera feed mirrored across
-    the screen midline.
-- **Height field** = FBM noise + four big-wave directional sine swells +
-  three medium-chop sines + a high-frequency product-of-sines shimmer.
-  The shimmer kills "dead zones" where smooth crests would otherwise
-  leave the surface looking flat.
-- Tinted with a cyan-blue body colour; opacity ~0.82.
+- **Above water:** ripple normals, refraction and screen-space reflection of
+  the rendered frame, Fresnel blend, sun glint, distance fade.
+- **Underwater:** blue-grey grade + slow wobble of the camera feed, the bright
+  underside of the surface overhead, vignette.
+- **Waterline:** a per-pixel test at the lens, so lowering the phone through
+  the level sweeps a moving waterline (with a thin meniscus) across the screen.
 
-The shader also includes a separate compute kernel (`cameraYCbCrToRGB`)
-that converts ARKit's biplanar `capturedImage` to a viewport-aligned RGBA
-texture so the water can sample it as a normal 2D image.
+The plane is infinite, so no edges are visible; the level animates to the
+flood depth and drains below the MMDA 8-inch noise floor. Tuning values live
+in `FloodController.settings`; see `docs/ARCHITECTURE.md`.
 
 ## MMDA gauge categories
 
@@ -144,12 +142,13 @@ The Info.plist (`BAHAR QC/BAHAR-QC-Info.plist`) provides:
 BAHAR QC/
 ├─ BAHAR_QCApp.swift           App entry
 ├─ ContentView.swift           Landing + AR session, HUD, snapshot
-├─ ARContainerView.swift       ARView wrapper, ground detection, water plane
-├─ WaterShader.metal           Water surface + geometry + camera YCbCr kernel
+├─ ARContainerView.swift       ARView wrapper, ground detection
+├─ FloodController.swift       Water post-process: level, uniforms, render callbacks
+├─ FloodWater.metal            Water kernel: surface, underwater, waterline
+├─ FloodShaderTypes.h          FloodUniforms shared by Swift and Metal
+├─ BAHAR QC-Bridging-Header.h  Exposes FloodShaderTypes.h to Swift
 ├─ FloodData.swift             Mapbox Tilequery client + 55 m grid cache
 ├─ LocationManager.swift       CLLocationManager wrapper
-├─ FloodFilterOverlay.swift    Optional underwater POV tint
-├─ CameraReflection.swift      ARKit camera texture binding
 ├─ Assets.xcassets             NOAH / UPRI logos, app icon
 └─ BAHAR-QC-Info.plist         Permissions + display strings
 ```
